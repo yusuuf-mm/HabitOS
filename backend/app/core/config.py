@@ -1,0 +1,114 @@
+"""Application configuration."""
+import os
+from functools import lru_cache
+from typing import Optional, List
+
+from pydantic import Field, PostgresDsn, RedisDsn, validator
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    """Application settings with environment-based configuration."""
+
+    # Application
+    APP_NAME: str = "Behavioral Optimization Platform"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = Field(default=False, env="DEBUG")
+    ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
+
+    # Server
+    HOST: str = Field(default="0.0.0.0", env="HOST")
+    PORT: int = Field(default=8000, env="PORT")
+    ROOT_PATH: str = Field(default="", env="ROOT_PATH")
+
+    # Database
+    DATABASE_URL: PostgresDsn = Field(
+        default="postgresql+asyncpg://user:password@localhost/behaviordb",
+        env="DATABASE_URL",
+    )
+    DATABASE_POOL_SIZE: int = Field(default=20, env="DATABASE_POOL_SIZE")
+    DATABASE_MAX_OVERFLOW: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
+    DATABASE_POOL_PRE_PING: bool = Field(default=True, env="DATABASE_POOL_PRE_PING")
+
+    # Redis
+    REDIS_URL: Optional[RedisDsn] = Field(default=None, env="REDIS_URL")
+
+    # Security
+    SECRET_KEY: str = Field(
+        default="your-secret-key-change-this-in-production",
+        env="SECRET_KEY",
+    )
+    ALGORITHM: str = Field(default="HS256", env="ALGORITHM")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
+    BCRYPT_ROUNDS: int = Field(default=12, env="BCRYPT_ROUNDS")
+
+    # CORS
+    CORS_ORIGINS: List[str] = Field(
+        default=["http://localhost:3000", "http://localhost:5173"],
+        env="CORS_ORIGINS",
+    )
+    CORS_ALLOW_CREDENTIALS: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
+    CORS_ALLOW_METHODS: List[str] = Field(default=["*"], env="CORS_ALLOW_METHODS")
+    CORS_ALLOW_HEADERS: List[str] = Field(default=["*"], env="CORS_ALLOW_HEADERS")
+
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = Field(default=True, env="RATE_LIMIT_ENABLED")
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = Field(default=60, env="RATE_LIMIT_REQUESTS_PER_MINUTE")
+
+    # Optimization Engine
+    OPTIMIZATION_SOLVER: str = Field(default="linear", env="OPTIMIZATION_SOLVER")
+    OPTIMIZATION_TIMEOUT_SECONDS: int = Field(default=30, env="OPTIMIZATION_TIMEOUT_SECONDS")
+    OPTIMIZATION_TIME_PERIODS: int = Field(default=7, env="OPTIMIZATION_TIME_PERIODS")  # days
+    OPTIMIZATION_MIN_SCHEDULE_DURATION: int = Field(default=15, env="OPTIMIZATION_MIN_SCHEDULE_DURATION")  # minutes
+
+    # AI/MCP Integration
+    MCP_SERVER_ENABLED: bool = Field(default=False, env="MCP_SERVER_ENABLED")
+    MCP_SERVER_HOST: str = Field(default="localhost", env="MCP_SERVER_HOST")
+    MCP_SERVER_PORT: int = Field(default=3000, env="MCP_SERVER_PORT")
+
+    # Logging
+    LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
+    LOG_FORMAT: str = Field(
+        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        env="LOG_FORMAT",
+    )
+
+    # Testing
+    TESTING: bool = Field(default=False, env="TESTING")
+
+    @validator("CORS_ORIGINS", pre=True)
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from comma-separated string."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
+
+    @validator("CORS_ALLOW_METHODS", pre=True)
+    def parse_cors_methods(cls, v):
+        """Parse CORS methods from comma-separated string."""
+        if isinstance(v, str):
+            return [method.strip() for method in v.split(",")]
+        return v
+
+    @validator("CORS_ALLOW_HEADERS", pre=True)
+    def parse_cors_headers(cls, v):
+        """Parse CORS headers from comma-separated string."""
+        if isinstance(v, str):
+            return [header.strip() for header in v.split(",")]
+        return v
+
+    class Config:
+        """Pydantic config."""
+
+        env_file = ".env"
+        case_sensitive = True
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings()
+
+
+settings = get_settings()
