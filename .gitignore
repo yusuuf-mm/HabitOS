@@ -1,4 +1,8 @@
+# Python - Backend
 .venv/
+venv/
+env/
+ENV/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,32 +26,111 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*.whl
 
-# Testing
+# Node - Frontend
+node_modules/
+npm-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+pnpm-lock.yaml
+.bun
+bun.lockb
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.nuxt/
+.cache/
+.turbo/
+
+# Testing & Coverage
 .pytest_cache/
 .coverage
 htmlcov/
+.nyc_output/
+coverage/
+.mocha_output/
 
-# IDE
+# IDE & Editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+*.iml
 .DS_Store
+Thumbs.db
 
-# Environment
+# Environment Variables (SENSITIVE - NEVER COMMIT)
 .env
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.example (keep this for reference)
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
+*.sql.bak
 
-# Logs
+# Logs & Debugging
 logs/
+*.log
+*.logs
+debug/
+.debug
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.sublime-workspace
+.vscode/
+Thumbs.db
+ehthumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+.#*
+
+# Dependencies lock files (optional - uncomment if using in team)
+# package-lock.json
+# requirements.txt (keep for deployment)
+
+# IDE generated
+.jshintrc
+.eslintcache
+.stylelintcache
+
+# Misc
+.cache
+.parcel-cache
+.next
+.nuxt
+.cache/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.venv.bak/
 *.log
 
 # Cache
