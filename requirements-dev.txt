@@ -1,0 +1,20 @@
+# Development Dependencies
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.2
+pytest-cov==4.1.0
+httpx==0.26.0
+
+# Code Quality
+ruff==0.1.13
+black==23.12.1
+mypy==1.8.0
+isort==5.13.2
+
+# Type Stubs
+types-redis==4.6.0.10
+
+# Development Tools
+ipython==8.20.0
+ipdb==0.13.13

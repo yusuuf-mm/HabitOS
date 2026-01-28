@@ -3,12 +3,16 @@ import os
 from functools import lru_cache
 from typing import Optional, List
 
-from pydantic import Field, PostgresDsn, RedisDsn, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings with environment-based configuration."""
+
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+    )
 
     # Application
     APP_NAME: str = "Behavioral Optimization Platform"
@@ -45,12 +49,18 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173"],
+        default=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"],
         env="CORS_ORIGINS",
     )
     CORS_ALLOW_CREDENTIALS: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
-    CORS_ALLOW_METHODS: List[str] = Field(default=["*"], env="CORS_ALLOW_METHODS")
-    CORS_ALLOW_HEADERS: List[str] = Field(default=["*"], env="CORS_ALLOW_HEADERS")
+    CORS_ALLOW_METHODS: List[str] = Field(
+        default=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        env="CORS_ALLOW_METHODS",
+    )
+    CORS_ALLOW_HEADERS: List[str] = Field(
+        default=["*"],
+        env="CORS_ALLOW_HEADERS",
+    )
 
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = Field(default=True, env="RATE_LIMIT_ENABLED")
@@ -77,32 +87,29 @@ class Settings(BaseSettings):
     # Testing
     TESTING: bool = Field(default=False, env="TESTING")
 
-    @validator("CORS_ORIGINS", pre=True)
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
     def parse_cors_origins(cls, v):
         """Parse CORS origins from comma-separated string."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return v
 
-    @validator("CORS_ALLOW_METHODS", pre=True)
+    @field_validator("CORS_ALLOW_METHODS", mode="before")
+    @classmethod
     def parse_cors_methods(cls, v):
         """Parse CORS methods from comma-separated string."""
         if isinstance(v, str):
             return [method.strip() for method in v.split(",")]
         return v
 
-    @validator("CORS_ALLOW_HEADERS", pre=True)
+    @field_validator("CORS_ALLOW_HEADERS", mode="before")
+    @classmethod
     def parse_cors_headers(cls, v):
         """Parse CORS headers from comma-separated string."""
         if isinstance(v, str):
             return [header.strip() for header in v.split(",")]
         return v
-
-    class Config:
-        """Pydantic config."""
-
-        env_file = ".env"
-        case_sensitive = True
 
 
 @lru_cache()

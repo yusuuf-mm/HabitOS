@@ -3,7 +3,7 @@ import logging
 from typing import Annotated, Optional
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -21,7 +21,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 async def get_current_user(
     db: AsyncSession = Depends(get_db_session),
-    credentials: Optional[HTTPAuthCredentials] = Depends(security),
+    credentials = Depends(security),
 ) -> User:
     """Get current authenticated user."""
     if not credentials:
@@ -72,7 +72,7 @@ async def get_current_active_user(
 
 async def get_optional_user(
     db: AsyncSession = Depends(get_db_session),
-    credentials: Optional[HTTPAuthCredentials] = Depends(security),
+    credentials = Depends(security),
 ) -> Optional[User]:
     """Get current user if authenticated, None otherwise."""
     if not credentials:

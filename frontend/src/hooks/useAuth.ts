@@ -19,31 +19,33 @@ export function useAuth() {
   // Check auth status on mount
   useEffect(() => {
     const checkAuth = async () => {
-      const storedTokens = useAuthStore.getState().tokens;
+      const token = localStorage.getItem("authToken");
       
-      if (storedTokens && storedTokens.expiresAt > Date.now()) {
+      if (token) {
+        // Token exists, user is authenticated
         setLoading(false);
-      } else if (storedTokens?.refreshToken) {
-        try {
-          const response = await apiClient.auth.refreshToken(storedTokens.refreshToken);
-          useAuthStore.getState().setTokens(response.data);
-        } catch {
-          storeLogout();
-        }
       } else {
         setLoading(false);
       }
     };
 
     checkAuth();
-  }, [setLoading, storeLogout]);
+  }, [setLoading]);
 
   const login = useCallback(
     async (credentials: UserCredentials) => {
       setLoading(true);
       try {
         const response = await apiClient.auth.login(credentials);
-        storeLogin(response.data.user, response.data.tokens);
+        // Save token to localStorage
+        localStorage.setItem("authToken", response.access_token);
+        // Update auth store
+        const authTokens: any = {
+          accessToken: response.access_token,
+          refreshToken: response.token_type,
+          expiresAt: Date.now() + 3600000, // 1 hour
+        };
+        storeLogin(response.user, authTokens);
         navigate("/dashboard");
         return { success: true };
       } catch (error: unknown) {
@@ -60,7 +62,15 @@ export function useAuth() {
       setLoading(true);
       try {
         const response = await apiClient.auth.register(payload);
-        storeLogin(response.data.user, response.data.tokens);
+        // Save token to localStorage
+        localStorage.setItem("authToken", response.access_token);
+        // Update auth store
+        const authTokens: any = {
+          accessToken: response.access_token,
+          refreshToken: response.token_type,
+          expiresAt: Date.now() + 3600000, // 1 hour
+        };
+        storeLogin(response.user, authTokens);
         navigate("/dashboard");
         return { success: true };
       } catch (error: unknown) {
@@ -76,6 +86,8 @@ export function useAuth() {
     try {
       await apiClient.auth.logout();
     } finally {
+      // Clear localStorage
+      localStorage.removeItem("authToken");
       storeLogout();
       navigate("/login");
     }

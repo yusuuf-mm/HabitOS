@@ -2,10 +2,10 @@
  * HabitOS API Client
  * 
  * Centralized API layer for all backend communication.
- * Currently uses mock data - designed to be easily replaced with real FastAPI backend.
+ * Connects to FastAPI backend at http://localhost:8000/api/v1
  * 
  * ALL backend communication MUST go through this file.
- * Components should NEVER import mock data directly.
+ * Components should NEVER make direct API calls.
  */
 
 import type {
@@ -27,7 +27,56 @@ import type {
 } from "@/types";
 
 // =============================================================================
-// MOCK DATA - Production-like data
+// CONFIG
+// =============================================================================
+
+const API_BASE_URL = "http://localhost:8000/api/v1";
+
+// Helper to get auth token from localStorage
+const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem("authToken");
+  } catch {
+    return null;
+  }
+};
+
+// Helper for API requests
+const apiCall = async <T>(
+  endpoint: string,
+  options?: RequestInit
+): Promise<T> => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    ...(options?.headers || {}),
+  };
+
+  // Add auth token if available
+  const token = getAuthToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw {
+      code: "API_ERROR",
+      message: error.message || `HTTP ${response.status}`,
+      status: response.status,
+    };
+  }
+
+  return response.json();
+};
+
+// =============================================================================
+// MOCK DATA - For reference, kept for development
 // =============================================================================
 
 const MOCK_USER: User = {
@@ -355,59 +404,31 @@ const generateId = (prefix: string) =>
 // =============================================================================
 
 export const authApi = {
-  async login(credentials: UserCredentials): Promise<ApiResponse<{ user: User; tokens: AuthTokens }>> {
-    await delay(800);
-    
-    if (credentials.email === "demo@habitos.io" && credentials.password === "demo123") {
-      const tokens: AuthTokens = {
-        accessToken: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${btoa(JSON.stringify({ userId: MOCK_USER.id, exp: Date.now() + 3600000 }))}`,
-        refreshToken: `refresh_${generateId("rt")}`,
-        expiresAt: Date.now() + 3600000,
-      };
-      
-      return createResponse({ user: MOCK_USER, tokens });
-    }
-    
-    throw { code: "AUTH_INVALID_CREDENTIALS", message: "Invalid email or password" };
-  },
-
-  async register(payload: RegisterPayload): Promise<ApiResponse<{ user: User; tokens: AuthTokens }>> {
-    await delay(1000);
-    
-    const newUser: User = {
-      id: generateId("usr"),
-      email: payload.email,
-      name: payload.name,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    
-    const tokens: AuthTokens = {
-      accessToken: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${btoa(JSON.stringify({ userId: newUser.id, exp: Date.now() + 3600000 }))}`,
-      refreshToken: `refresh_${generateId("rt")}`,
-      expiresAt: Date.now() + 3600000,
-    };
-    
-    return createResponse({ user: newUser, tokens });
-  },
-
-  async refreshToken(refreshToken: string): Promise<ApiResponse<AuthTokens>> {
-    await delay(300);
-    
-    if (!refreshToken) {
-      throw { code: "AUTH_INVALID_REFRESH_TOKEN", message: "Invalid refresh token" };
-    }
-    
-    return createResponse({
-      accessToken: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${btoa(JSON.stringify({ userId: MOCK_USER.id, exp: Date.now() + 3600000 }))}`,
-      refreshToken: `refresh_${generateId("rt")}`,
-      expiresAt: Date.now() + 3600000,
+  async login(credentials: UserCredentials): Promise<{ access_token: string; token_type: string; user: User }> {
+    return apiCall("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
     });
   },
 
-  async logout(): Promise<ApiResponse<null>> {
-    await delay(200);
-    return createResponse(null);
+  async register(payload: RegisterPayload): Promise<{ access_token: string; token_type: string; user: User }> {
+    return apiCall("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async refreshToken(refreshToken: string): Promise<{ access_token: string; token_type: string }> {
+    return apiCall("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  },
+
+  async logout(): Promise<{ message: string }> {
+    return apiCall("/auth/logout", {
+      method: "POST",
+    });
   },
 };
 
@@ -415,63 +436,37 @@ export const authApi = {
 // BEHAVIORS API
 // =============================================================================
 
-let mockBehaviors = [...MOCK_BEHAVIORS];
-
 export const behaviorsApi = {
-  async getBehaviors(): Promise<ApiResponse<Behavior[]>> {
-    await delay(500);
-    return createResponse(mockBehaviors);
+  async getBehaviors(): Promise<Behavior[]> {
+    return apiCall("/behaviors");
   },
 
-  async getBehavior(id: string): Promise<ApiResponse<Behavior>> {
-    await delay(300);
-    const behavior = mockBehaviors.find((b) => b.id === id);
-    if (!behavior) {
-      throw { code: "BEHAVIOR_NOT_FOUND", message: "Behavior not found" };
-    }
-    return createResponse(behavior);
+  async getBehavior(id: string): Promise<Behavior> {
+    return apiCall(`/behaviors/${id}`);
   },
 
-  async createBehavior(data: BehaviorFormData): Promise<ApiResponse<Behavior>> {
-    await delay(600);
-    const newBehavior: Behavior = {
-      id: generateId("bhv"),
-      userId: MOCK_USER.id,
-      ...data,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockBehaviors = [newBehavior, ...mockBehaviors];
-    return createResponse(newBehavior, true, "Behavior created successfully");
+  async createBehavior(data: BehaviorFormData): Promise<Behavior> {
+    return apiCall("/behaviors", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   },
 
-  async updateBehavior(id: string, data: Partial<BehaviorFormData>): Promise<ApiResponse<Behavior>> {
-    await delay(500);
-    const index = mockBehaviors.findIndex((b) => b.id === id);
-    if (index === -1) {
-      throw { code: "BEHAVIOR_NOT_FOUND", message: "Behavior not found" };
-    }
-    mockBehaviors[index] = {
-      ...mockBehaviors[index],
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
-    return createResponse(mockBehaviors[index], true, "Behavior updated successfully");
+  async updateBehavior(id: string, data: Partial<BehaviorFormData>): Promise<Behavior> {
+    return apiCall(`/behaviors/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
   },
 
-  async deleteBehavior(id: string): Promise<ApiResponse<null>> {
-    await delay(400);
-    const index = mockBehaviors.findIndex((b) => b.id === id);
-    if (index === -1) {
-      throw { code: "BEHAVIOR_NOT_FOUND", message: "Behavior not found" };
-    }
-    mockBehaviors = mockBehaviors.filter((b) => b.id !== id);
-    return createResponse(null, true, "Behavior deleted successfully");
+  async deleteBehavior(id: string): Promise<{ message: string }> {
+    return apiCall(`/behaviors/${id}`, {
+      method: "DELETE",
+    });
   },
 
-  async getObjectives(): Promise<ApiResponse<Objective[]>> {
-    await delay(300);
-    return createResponse(MOCK_OBJECTIVES);
+  async getObjectives(): Promise<Objective[]> {
+    return apiCall("/behaviors/objectives");
   },
 };
 
@@ -480,40 +475,19 @@ export const behaviorsApi = {
 // =============================================================================
 
 export const optimizationApi = {
-  async runOptimization(request?: OptimizationRequest): Promise<ApiResponse<OptimizationResult>> {
-    await delay(2500); // Simulate optimization processing
-    
-    const schedule = generateTodaySchedule();
-    const run: OptimizationRun = {
-      id: generateId("opt_run"),
-      userId: MOCK_USER.id,
-      status: "completed",
-      solverStatus: "optimal",
-      scheduledBehaviors: schedule.scheduledBehaviors,
-      objectiveContributions: schedule.objectiveScores,
-      totalScore: 0.78 + Math.random() * 0.15,
-      executionTimeMs: 180 + Math.floor(Math.random() * 200),
-      constraintsSatisfied: 6,
-      constraintsTotal: 6,
-      createdAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    };
-    
-    return createResponse({ run, schedule }, true, "Optimization completed successfully");
+  async runOptimization(request?: OptimizationRequest): Promise<OptimizationResult> {
+    return apiCall("/optimization/solve", {
+      method: "POST",
+      body: JSON.stringify(request || {}),
+    });
   },
 
-  async getOptimizationHistory(): Promise<ApiResponse<OptimizationRun[]>> {
-    await delay(600);
-    return createResponse(MOCK_OPTIMIZATION_RUNS);
+  async getOptimizationHistory(): Promise<OptimizationRun[]> {
+    return apiCall("/optimization/history");
   },
 
-  async getOptimizationRun(id: string): Promise<ApiResponse<OptimizationRun>> {
-    await delay(400);
-    const run = MOCK_OPTIMIZATION_RUNS.find((r) => r.id === id);
-    if (!run) {
-      throw { code: "OPTIMIZATION_NOT_FOUND", message: "Optimization run not found" };
-    }
-    return createResponse(run);
+  async getOptimizationRun(id: string): Promise<OptimizationRun> {
+    return apiCall(`/optimization/history/${id}`);
   },
 };
 
@@ -522,23 +496,21 @@ export const optimizationApi = {
 // =============================================================================
 
 export const scheduleApi = {
-  async getSchedule(date?: string): Promise<ApiResponse<DailySchedule>> {
-    await delay(500);
-    const schedule = generateTodaySchedule();
-    if (date) {
-      schedule.date = date;
-    }
-    return createResponse(schedule);
+  async getSchedule(date?: string): Promise<DailySchedule> {
+    const endpoint = date ? `/schedule?date=${date}` : "/schedule";
+    return apiCall(endpoint);
   },
 
-  async markBehaviorComplete(scheduledBehaviorId: string): Promise<ApiResponse<null>> {
-    await delay(300);
-    return createResponse(null, true, "Behavior marked as complete");
+  async markBehaviorComplete(scheduledBehaviorId: string): Promise<{ message: string }> {
+    return apiCall(`/schedule/${scheduledBehaviorId}/complete`, {
+      method: "POST",
+    });
   },
 
-  async markBehaviorIncomplete(scheduledBehaviorId: string): Promise<ApiResponse<null>> {
-    await delay(300);
-    return createResponse(null, true, "Behavior marked as incomplete");
+  async markBehaviorIncomplete(scheduledBehaviorId: string): Promise<{ message: string }> {
+    return apiCall(`/schedule/${scheduledBehaviorId}/incomplete`, {
+      method: "POST",
+    });
   },
 };
 
@@ -547,97 +519,16 @@ export const scheduleApi = {
 // =============================================================================
 
 export const analyticsApi = {
-  async getStats(): Promise<ApiResponse<DashboardStats>> {
-    await delay(400);
-    return createResponse({
-      totalBehaviors: mockBehaviors.length,
-      activeBehaviors: mockBehaviors.filter((b) => b.isActive).length,
-      totalOptimizationRuns: MOCK_OPTIMIZATION_RUNS.length,
-      completionRate: 0.73,
-      averageScore: 0.81,
-      streakDays: 12,
-    });
+  async getStats(): Promise<DashboardStats> {
+    return apiCall("/analytics/stats");
   },
 
-  async getDashboardSummary(): Promise<ApiResponse<DashboardSummary>> {
-    await delay(700);
-    const schedule = generateTodaySchedule();
-    
-    return createResponse({
-      stats: {
-        totalBehaviors: mockBehaviors.length,
-        activeBehaviors: mockBehaviors.filter((b) => b.isActive).length,
-        totalOptimizationRuns: MOCK_OPTIMIZATION_RUNS.length,
-        completionRate: 0.73,
-        averageScore: 0.81,
-        streakDays: 12,
-      },
-      recentOptimizations: MOCK_OPTIMIZATION_RUNS.slice(0, 5).map((r) => ({
-        id: r.id,
-        status: r.status,
-        score: r.totalScore,
-        createdAt: r.createdAt,
-      })),
-      recentBehaviors: mockBehaviors.slice(0, 5).map((b) => ({
-        id: b.id,
-        name: b.name,
-        category: b.category,
-        isActive: b.isActive,
-        createdAt: b.createdAt,
-      })),
-      todaySchedule: schedule.scheduledBehaviors.map((sb) => ({
-        id: sb.id,
-        behaviorName: sb.behavior.name,
-        timeSlot: sb.timeSlot,
-        startTime: sb.startTime,
-        isCompleted: sb.isCompleted,
-      })),
-    });
+  async getDashboardSummary(): Promise<DashboardSummary> {
+    return apiCall("/analytics/summary");
   },
 
-  async getAnalytics(period: string = "7d"): Promise<ApiResponse<AnalyticsData>> {
-    await delay(600);
-    
-    const days = period === "30d" ? 30 : period === "7d" ? 7 : 14;
-    const behaviorCompletions = [];
-    const energyUsage = [];
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split("T")[0];
-      
-      behaviorCompletions.push({
-        date: dateStr,
-        completed: 4 + Math.floor(Math.random() * 3),
-        scheduled: 6,
-      });
-      
-      energyUsage.push({
-        date: dateStr,
-        energySpent: 25 + Math.floor(Math.random() * 15),
-        energyBudget: 40,
-      });
-    }
-    
-    return createResponse({
-      period,
-      behaviorCompletions,
-      objectiveProgress: [
-        { objectiveName: "Physical Health", progress: 0.78, trend: "up" },
-        { objectiveName: "Career Growth", progress: 0.82, trend: "up" },
-        { objectiveName: "Continuous Learning", progress: 0.65, trend: "stable" },
-        { objectiveName: "Mental Clarity", progress: 0.71, trend: "up" },
-      ],
-      categoryDistribution: [
-        { category: "health", count: 2, percentage: 28 },
-        { category: "productivity", count: 1, percentage: 14 },
-        { category: "learning", count: 2, percentage: 28 },
-        { category: "mindfulness", count: 1, percentage: 14 },
-        { category: "creativity", count: 1, percentage: 14 },
-      ],
-      energyUsage,
-    });
+  async getAnalytics(period: string = "7d"): Promise<AnalyticsData> {
+    return apiCall(`/analytics?period=${period}`);
   },
 };
 
