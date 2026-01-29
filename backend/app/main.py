@@ -11,7 +11,13 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.core import settings, BehaviorOptimizationException
 from app.core.exceptions import ValidationError, DatabaseError
 from app.db.database import init_db, close_db
-from app.api.v1 import auth_router, behaviors_router, optimization_router
+from app.api.v1 import (
+    auth_router,
+    behaviors_router,
+    optimization_router,
+    schedule_router,
+    analytics_router,
+)
 from app.schemas import HealthCheckResponse, ErrorResponse
 
 logger = logging.getLogger(__name__)
@@ -149,6 +155,8 @@ async def health_check():
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(behaviors_router, prefix="/api/v1")
 app.include_router(optimization_router, prefix="/api/v1")
+app.include_router(schedule_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

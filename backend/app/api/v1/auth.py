@@ -1,6 +1,6 @@
 """Authentication routes."""
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,4 +143,17 @@ async def refresh_token(
     return {
         "access_token": access_token,
         "token_type": "bearer",
+    }
+
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(CurrentUserDep),
+) -> dict:
+    """Logout user."""
+    # Since we use stateless JWT, we just return success
+    # In a stateful system, we would invalidate the token here
+    return {
+        "success": True,
+        "message": "Logged out successfully",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }

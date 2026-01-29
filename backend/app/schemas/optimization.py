@@ -35,8 +35,8 @@ class InfeasibilityDiagnostics(BaseModel):
 class OptimizationRequest(BaseModel):
     """Optimization request."""
 
-    start_date: date
-    end_date: date
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
     time_periods: Optional[int] = None
 
     @validator("start_date")

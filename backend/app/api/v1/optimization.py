@@ -103,10 +103,11 @@ async def solve_optimization(
             for c in constraints_db
         ]
 
-        # Determine time periods
+        # Determine time periods and dates
+        from datetime import date as date_class, timedelta
         time_periods = request.time_periods or settings.OPTIMIZATION_TIME_PERIODS
-        start_date = request.start_date
-        end_date = request.end_date
+        start_date = request.start_date or date_class.today()
+        end_date = request.end_date or (start_date + timedelta(days=time_periods - 1))
 
         # Create optimization problem
         problem = OptimizationProblem(

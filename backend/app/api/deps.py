@@ -94,7 +94,5 @@ async def get_optional_user(
 CurrentUserDep = Annotated[User, Depends(get_current_active_user)]
 OptionalUserDep = Annotated[Optional[User], Depends(get_optional_user)]
 
-
-def get_db() -> AsyncSession:
-    """Get database session (compatibility wrapper)."""
-    return Depends(get_db_session)
+# Export get_db_session as get_db for backward compatibility
+get_db = get_db_session

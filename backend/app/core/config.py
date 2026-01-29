@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"],
+        default=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:8081"],
         env="CORS_ORIGINS",
     )
     CORS_ALLOW_CREDENTIALS: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")

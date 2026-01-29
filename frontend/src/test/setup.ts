@@ -6,10 +6,22 @@ Object.defineProperty(window, "matchMedia", {
     matches: false,
     media: query,
     onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => {},
+    addListener: () => { },
+    removeListener: () => { },
+    addEventListener: () => { },
+    removeEventListener: () => { },
+    dispatchEvent: () => { },
   }),
 });
+
+// Mock import.meta.env
+(global as any).import = {
+  meta: {
+    env: {
+      VITE_API_URL: "http://localhost:8000/api/v1",
+      DEV: true,
+      MODE: "test",
+      BASE_URL: "/",
+    },
+  },
+};

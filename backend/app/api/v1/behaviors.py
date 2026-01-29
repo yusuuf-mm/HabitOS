@@ -2,13 +2,14 @@
 import logging
 from typing import List
 from uuid import UUID
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.api.deps import get_db, get_current_active_user
-from app.models import User, Behavior, CompletionLog
+from app.models import User, Behavior, CompletionLog, Objective
 from app.schemas import (
     BehaviorCreate,
     BehaviorUpdate,
@@ -91,7 +92,12 @@ async def list_behaviors(
         )
         items.append(item_response)
 
-    return BehaviorListResponse(total=total, skip=skip, limit=limit, items=items)
+    return {
+        "data": items,
+        "success": True,
+        "message": f"Retrieved {len(items)} behaviors",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.post("", response_model=BehaviorResponse, status_code=201)
@@ -101,7 +107,9 @@ async def create_behavior(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Create a new behavior."""
+    from uuid import uuid4
     behavior = Behavior(
+        id=uuid4(),
         user_id=current_user.id,
         name=request.name,
         description=request.description,
@@ -142,6 +150,36 @@ async def create_behavior(
         created_at=behavior.created_at,
         updated_at=behavior.updated_at,
     )
+
+
+
+@router.get("/objectives", response_model=dict)
+async def list_objectives(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """List user objectives."""
+    result = await db.execute(
+        select(Objective).where(Objective.user_id == current_user.id)
+    )
+    objectives = result.scalars().all()
+
+    return {
+        "data": [
+            {
+                "id": str(obj.id),
+                "userId": str(obj.user_id),
+                "name": obj.type.value,
+                "description": obj.description,
+                "priority": int(obj.weight * 10),  # Map weight 0-1 to priority 1-10
+                "createdAt": obj.created_at.isoformat(),
+            }
+            for obj in objectives
+        ],
+        "success": True,
+        "message": "Objectives retrieved successfully",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/{behavior_id}", response_model=BehaviorResponse)
