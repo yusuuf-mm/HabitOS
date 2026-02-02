@@ -2,7 +2,7 @@
 from datetime import datetime, timezone, date
 from enum import Enum
 from typing import Optional, List
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, DateTime, ForeignKey, JSON, Float, Integer, Boolean, Date, Index, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -33,7 +33,7 @@ class OptimizationRun(Base):
 
     __tablename__ = "optimization_runs"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     status: Mapped[OptimizationStatus] = mapped_column(SQLEnum(OptimizationStatus), default=OptimizationStatus.PENDING)
     solver: Mapped[SolverType] = mapped_column(SQLEnum(SolverType))
@@ -61,7 +61,7 @@ class OptimizationRun(Base):
     __table_args__ = (
         Index("idx_optimization_runs_user_id", "user_id"),
         Index("idx_optimization_runs_status", "status"),
-        Index("idx_optimization_runs_created_at", "created_at"),
+        Index("idx_optimization_runs_created_at", "created_at", postgresql_using="btree", postgresql_ops={"created_at": "DESC"}),
     )
 
 
@@ -70,7 +70,7 @@ class ScheduledBehavior(Base):
 
     __tablename__ = "scheduled_behaviors"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     optimization_run_id: Mapped[UUID] = mapped_column(ForeignKey("optimization_runs.id", ondelete="CASCADE"))
     behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="CASCADE"))
     time_period: Mapped[int] = mapped_column(Integer, nullable=False)

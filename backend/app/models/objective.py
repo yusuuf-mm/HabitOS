@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, Float, DateTime, ForeignKey, Index, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,7 +25,7 @@ class Objective(Base):
 
     __tablename__ = "objectives"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     type: Mapped[ObjectiveType] = mapped_column(SQLEnum(ObjectiveType))
     weight: Mapped[float] = mapped_column(Float, nullable=False)

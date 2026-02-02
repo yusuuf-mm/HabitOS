@@ -10,10 +10,8 @@ class UserRegistration(BaseModel):
     """User registration request."""
 
     email: EmailStr
-    username: str = Field(..., min_length=3, max_length=100)
+    name: str = Field(..., min_length=1, max_length=100)
     password: str = Field(..., min_length=8)
-    first_name: Optional[str] = Field(None, max_length=100)
-    last_name: Optional[str] = Field(None, max_length=100)
 
     @validator("password")
     def validate_password(cls, v):
@@ -35,8 +33,8 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     """User update request."""
 
-    first_name: Optional[str] = Field(None, max_length=100)
-    last_name: Optional[str] = Field(None, max_length=100)
+    name: Optional[str] = Field(None, max_length=100)
+    avatar: Optional[str] = None
     password: Optional[str] = Field(None, min_length=8)
 
     @validator("password")
@@ -56,36 +54,36 @@ class UserResponse(BaseModel):
 
     id: UUID
     email: str
-    username: str
-    first_name: Optional[str]
-    last_name: Optional[str]
+    name: str
+    avatar: Optional[str] = None
     status: str
-    created_at: datetime
-    updated_at: datetime
+    createdAt: datetime = Field(..., validation_alias="created_at")
+    updatedAt: datetime = Field(..., validation_alias="updated_at")
 
     class Config:
         """Pydantic config."""
 
         from_attributes = True
+        populate_by_name = True
 
 
 class TokenRefreshRequest(BaseModel):
     """Token refresh request."""
 
-    refresh_token: str
+    refreshToken: str = Field(..., validation_alias="refresh_token")
 
 
 class TokenRefreshResponse(BaseModel):
     """Token refresh response."""
 
-    access_token: str
-    token_type: str = "bearer"
+    accessToken: str = Field(..., validation_alias="access_token")
+    tokenType: str = Field("bearer", validation_alias="token_type")
 
 
 class AuthResponse(BaseModel):
     """Authentication response."""
 
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
+    accessToken: str = Field(..., validation_alias="access_token")
+    refreshToken: str = Field(..., validation_alias="refresh_token")
+    tokenType: str = Field("bearer", validation_alias="token_type")
     user: UserResponse

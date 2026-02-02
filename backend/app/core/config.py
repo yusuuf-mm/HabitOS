@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     ROOT_PATH: str = Field(default="", env="ROOT_PATH")
 
     # Database
-    DATABASE_URL: PostgresDsn = Field(
+    DATABASE_URL: str = Field(
         default="postgresql+asyncpg://user:password@localhost/behaviordb",
         env="DATABASE_URL",
     )

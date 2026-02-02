@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.api.deps import get_db, CurrentUserDep
+from app.api.deps import get_db, CurrentUserDep, get_current_active_user
 from app.core import (
     create_access_token,
     create_refresh_token,
@@ -46,15 +46,15 @@ async def register(
     # Create user
     user = User(
         email=request.email,
-        username=request.username,
+        username=request.email,  # Using email as username for now
         password_hash=hash_password(request.password),
-        first_name=request.first_name,
-        last_name=request.last_name,
     )
+    user.name = request.name
     db.add(user)
     await db.flush()
 
     # Create default objectives
+    from app.models.objective import Objective
     default_weights = Objective.get_default_objectives()
     for obj_type, weight in default_weights.items():
         objective = Objective(
@@ -79,7 +79,7 @@ async def register(
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": UserResponse.from_orm(user),
+        "user": user, # Pydantic will handle UserResponse conversion
     }
 
 
@@ -98,7 +98,7 @@ async def login(
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Update last login
-    user.last_login = None  # Will use database default
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)
 
@@ -114,7 +114,7 @@ async def login(
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": UserResponse.from_orm(user),
+        "user": user,
     }
 
 
@@ -125,12 +125,15 @@ async def refresh_token(
 ) -> dict:
     """Refresh access token."""
     try:
-        payload = verify_token(request.refresh_token)
+        # Pydantic alias handling means request.refreshToken is mapped to refreshToken in Python if using populate_by_name
+        # But wait, request: TokenRefreshRequest will have 'refreshToken' field if we used alias.
+        payload = verify_token(request.refreshToken)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id))
+    from uuid import UUID
+    result = await db.execute(select(User).where(User.id == UUID(user_id)))
     user = result.scalars().first()
 
     if not user:
@@ -145,15 +148,14 @@ async def refresh_token(
         "token_type": "bearer",
     }
 
+
 @router.post("/logout")
 async def logout(
-    current_user: User = Depends(CurrentUserDep),
+    current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Logout user."""
-    # Since we use stateless JWT, we just return success
-    # In a stateful system, we would invalidate the token here
-    return {
-        "success": True,
-        "message": "Logged out successfully",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    return ApiResponse(
+        success=True,
+        message="Logged out successfully",
+        data={}
+    ).dict(exclude_none=True)

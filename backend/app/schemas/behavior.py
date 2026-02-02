@@ -6,14 +6,22 @@ from uuid import UUID
 from pydantic import BaseModel, Field, validator
 
 
-class BehaviorImpacts(BaseModel):
-    """Behavior impacts on objectives."""
+class ObjectiveImpactCreate(BaseModel):
+    """Behavior impact creation schema."""
 
-    health: float = Field(0.0, ge=0.0, le=1.0)
-    productivity: float = Field(0.0, ge=0.0, le=1.0)
-    learning: float = Field(0.0, ge=0.0, le=1.0)
-    wellness: float = Field(0.0, ge=0.0, le=1.0)
-    social: float = Field(0.0, ge=0.0, le=1.0)
+    objectiveId: UUID = Field(..., validation_alias="objectiveId")
+    impactScore: float = Field(..., ge=-1.0, le=1.0, validation_alias="impactScore")
+
+
+class ObjectiveImpactResponse(BaseModel):
+    """Behavior impact response schema."""
+
+    objectiveId: UUID
+    objectiveName: str
+    impactScore: float
+
+    class Config:
+        from_attributes = True
 
 
 class BehaviorCreate(BaseModel):
@@ -22,33 +30,37 @@ class BehaviorCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=500)
     category: str = Field(...)
-    min_duration: int = Field(..., gt=0)
-    typical_duration: int = Field(..., gt=0)
-    max_duration: int = Field(..., gt=0)
-    energy_cost: float = Field(1.0, gt=0)
-    preferred_time_slots: Optional[List[str]] = Field(default=["flexible"])
-    impacts: BehaviorImpacts = Field(default_factory=BehaviorImpacts)
+    energyCost: int = Field(..., ge=1, le=10, validation_alias="energyCost")
+    durationMin: int = Field(..., gt=0, validation_alias="durationMin")
+    durationMax: int = Field(..., gt=0, validation_alias="durationMax")
+    preferredTimeSlots: List[str] = Field(default_factory=lambda: ["flexible"], validation_alias="preferredTimeSlots")
+    objectiveImpacts: List[ObjectiveImpactCreate] = Field(default_factory=list, validation_alias="objectiveImpacts")
+    isActive: bool = Field(default=True, validation_alias="isActive")
+    frequency: str = Field("daily")
+    frequencyCount: Optional[int] = Field(None, validation_alias="frequencyCount")
 
     @validator("category")
     def validate_category(cls, v):
         """Validate category."""
-        valid = ["health", "productivity", "learning", "wellness", "social"]
+        valid = [
+            "health",
+            "productivity",
+            "learning",
+            "social",
+            "financial",
+            "creativity",
+            "mindfulness",
+            "wellness",
+        ]
         if v not in valid:
             raise ValueError(f"Category must be one of {valid}")
         return v
 
-    @validator("typical_duration", always=True)
+    @validator("durationMax", always=True)
     def validate_durations(cls, v, values):
         """Validate duration relationships."""
-        if "min_duration" in values and v < values["min_duration"]:
-            raise ValueError("typical_duration must be >= min_duration")
-        return v
-
-    @validator("max_duration", always=True)
-    def validate_max_duration(cls, v, values):
-        """Validate max duration."""
-        if "typical_duration" in values and v < values["typical_duration"]:
-            raise ValueError("max_duration must be >= typical_duration")
+        if "durationMin" in values and v < values["durationMin"]:
+            raise ValueError("durationMax must be >= durationMin")
         return v
 
 
@@ -58,46 +70,54 @@ class BehaviorUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=500)
     category: Optional[str] = None
-    min_duration: Optional[int] = Field(None, gt=0)
-    typical_duration: Optional[int] = Field(None, gt=0)
-    max_duration: Optional[int] = Field(None, gt=0)
-    energy_cost: Optional[float] = Field(None, gt=0)
-    preferred_time_slots: Optional[List[str]] = None
-    impacts: Optional[BehaviorImpacts] = None
+    energyCost: Optional[int] = Field(None, ge=1, le=10, validation_alias="energyCost")
+    durationMin: Optional[int] = Field(None, gt=0, validation_alias="durationMin")
+    durationMax: Optional[int] = Field(None, gt=0, validation_alias="durationMax")
+    preferredTimeSlots: Optional[List[str]] = Field(None, validation_alias="preferredTimeSlots")
+    objectiveImpacts: Optional[List[ObjectiveImpactCreate]] = Field(None, validation_alias="objectiveImpacts")
+    isActive: Optional[bool] = Field(None, validation_alias="isActive")
+    frequency: Optional[str] = None
+    frequencyCount: Optional[int] = Field(None, validation_alias="frequencyCount")
 
 
 class BehaviorStatistics(BaseModel):
     """Behavior statistics."""
 
-    total_completions: int = 0
-    avg_duration: Optional[float] = None
-    avg_satisfaction: Optional[float] = None
-    last_completed: Optional[datetime] = None
-    total_duration: int = 0
+    totalCompletions: int = Field(0, validation_alias="total_completions")
+    avgDuration: Optional[float] = Field(None, validation_alias="avg_duration")
+    avgSatisfaction: Optional[float] = Field(None, validation_alias="avg_satisfaction")
+    lastCompleted: Optional[datetime] = Field(None, validation_alias="last_completed")
+    totalDuration: int = Field(0, validation_alias="total_duration")
+
+    class Config:
+        populate_by_name = True
 
 
 class BehaviorResponse(BaseModel):
     """Behavior response."""
 
     id: UUID
+    userId: UUID = Field(..., validation_alias="user_id")
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     category: str
-    min_duration: int
-    typical_duration: int
-    max_duration: int
-    energy_cost: float
-    is_active: bool
-    preferred_time_slots: List[str]
-    impacts: BehaviorImpacts
-    created_at: datetime
-    updated_at: datetime
+    energyCost: int = Field(..., validation_alias="energy_cost")
+    durationMin: int = Field(..., validation_alias="duration_min")
+    durationMax: int = Field(..., validation_alias="duration_max")
+    preferredTimeSlots: List[str] = Field(..., validation_alias="preferred_time_slots")
+    objectiveImpacts: List[ObjectiveImpactResponse] = Field(default_factory=list, validation_alias="objective_impacts")
+    isActive: bool = Field(..., validation_alias="is_active")
+    frequency: str
+    frequencyCount: Optional[int] = Field(None, validation_alias="frequency_count")
+    createdAt: datetime = Field(..., validation_alias="created_at")
+    updatedAt: datetime = Field(..., validation_alias="updated_at")
     statistics: Optional[BehaviorStatistics] = None
 
     class Config:
         """Pydantic config."""
 
         from_attributes = True
+        populate_by_name = True
 
 
 class BehaviorListResponse(BaseModel):
@@ -106,4 +126,4 @@ class BehaviorListResponse(BaseModel):
     total: int
     skip: int
     limit: int
-    items: List[BehaviorResponse]
+    data: List[BehaviorResponse]

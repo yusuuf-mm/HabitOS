@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, DateTime, ForeignKey, JSON, Boolean, Index, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,7 +25,7 @@ class Constraint(Base):
 
     __tablename__ = "constraints"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     type: Mapped[ConstraintType] = mapped_column(SQLEnum(ConstraintType))
     parameters: Mapped[dict] = mapped_column(JSON, nullable=False)

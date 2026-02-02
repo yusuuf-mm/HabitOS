@@ -1,6 +1,6 @@
 """Behavior routes."""
 import logging
-from typing import List
+from typing import List, Dict
 from uuid import UUID
 from datetime import datetime, timezone
 
@@ -10,14 +10,15 @@ from sqlalchemy import select, func
 
 from app.api.deps import get_db, get_current_active_user
 from app.models import User, Behavior, CompletionLog, Objective
-from app.schemas import (
+from app.schemas.api import ApiResponse
+from app.schemas.behavior import (
     BehaviorCreate,
     BehaviorUpdate,
     BehaviorResponse,
     BehaviorListResponse,
     BehaviorStatistics,
-    BehaviorImpacts,
-    PaginationParams,
+    ObjectiveImpactCreate,
+    ObjectiveImpactResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,60 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
 
 
-@router.get("", response_model=BehaviorListResponse)
+async def get_objective_map(db: AsyncSession, user_id: UUID) -> Dict[str, UUID]:
+    """Get mapping of objective type to its ID."""
+    result = await db.execute(select(Objective).where(Objective.user_id == user_id))
+    objectives = result.scalars().all()
+    # Handle cases where objective names might be stored as enum values
+    return {obj.type.value if hasattr(obj.type, "value") else str(obj.type): obj.id for obj in objectives}
+
+
+def map_behavior_to_response(behavior: Behavior, stats: tuple = None, objective_map: Dict[str, UUID] = None) -> BehaviorResponse:
+    """Map behavior model to BehaviorResponse schema."""
+    impacts = []
+    if objective_map:
+        for obj_type, obj_id in objective_map.items():
+            impact_score = behavior.get_impact(obj_type)
+            if impact_score != 0:
+                impacts.append(
+                    ObjectiveImpactResponse(
+                        objectiveId=obj_id,
+                        objectiveName=obj_type.capitalize(),
+                        impactScore=impact_score
+                    )
+                )
+
+    statistics = None
+    if stats:
+        statistics = BehaviorStatistics(
+            total_completions=stats[0] or 0,
+            avg_duration=stats[1],
+            avg_satisfaction=stats[2],
+            last_completed=stats[3],
+            total_duration=int(stats[4] or 0),
+        )
+
+    return BehaviorResponse(
+        id=behavior.id,
+        userId=behavior.user_id,
+        name=behavior.name,
+        description=behavior.description,
+        category=behavior.category.value if hasattr(behavior.category, "value") else str(behavior.category),
+        energyCost=behavior.energy_cost,
+        durationMin=behavior.min_duration,
+        durationMax=behavior.max_duration,
+        preferredTimeSlots=[s.value if hasattr(s, "value") else str(s) for s in behavior.preferred_time_slots],
+        objectiveImpacts=impacts,
+        isActive=behavior.is_active,
+        frequency=getattr(behavior, "frequency", "daily"),
+        frequencyCount=getattr(behavior, "frequency_count", None),
+        createdAt=behavior.created_at,
+        updatedAt=behavior.updated_at,
+        statistics=statistics,
+    )
+
+
+@router.get("", response_model=ApiResponse[BehaviorListResponse])
 async def list_behaviors(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -47,6 +101,8 @@ async def list_behaviors(
         .limit(limit)
     )
     behaviors = result.scalars().all()
+    
+    objective_map = await get_objective_map(db, current_user.id)
 
     # Build responses with statistics
     items = []
@@ -61,99 +117,65 @@ async def list_behaviors(
             ).where(CompletionLog.behavior_id == behavior.id)
         )
         stats = stats_result.first()
+        items.append(map_behavior_to_response(behavior, stats, objective_map))
 
-        item_response = BehaviorResponse(
-            id=behavior.id,
-            name=behavior.name,
-            description=behavior.description,
-            category=behavior.category.value,
-            min_duration=behavior.min_duration,
-            typical_duration=behavior.typical_duration,
-            max_duration=behavior.max_duration,
-            energy_cost=behavior.energy_cost,
-            is_active=behavior.is_active,
-            preferred_time_slots=[s.value for s in behavior.preferred_time_slots],
-            impacts=BehaviorImpacts(
-                health=behavior.impact_on_health,
-                productivity=behavior.impact_on_productivity,
-                learning=behavior.impact_on_learning,
-                wellness=behavior.impact_on_wellness,
-                social=behavior.impact_on_social,
-            ),
-            created_at=behavior.created_at,
-            updated_at=behavior.updated_at,
-            statistics=BehaviorStatistics(
-                total_completions=stats[0] or 0,
-                avg_duration=stats[1],
-                avg_satisfaction=stats[2],
-                last_completed=stats[3],
-                total_duration=int(stats[4] or 0),
-            ),
-        )
-        items.append(item_response)
-
-    return {
-        "data": items,
-        "success": True,
-        "message": f"Retrieved {len(items)} behaviors",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    return ApiResponse(
+        data=BehaviorListResponse(
+            total=total,
+            skip=skip,
+            limit=limit,
+            data=items
+        ),
+        message=f"Retrieved {len(items)} behaviors"
+    ).dict(exclude_none=True)
 
 
-@router.post("", response_model=BehaviorResponse, status_code=201)
+@router.post("", response_model=ApiResponse[BehaviorResponse], status_code=201)
 async def create_behavior(
     request: BehaviorCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Create a new behavior."""
-    from uuid import uuid4
     behavior = Behavior(
-        id=uuid4(),
         user_id=current_user.id,
         name=request.name,
         description=request.description,
         category=request.category,
-        min_duration=request.min_duration,
-        typical_duration=request.typical_duration,
-        max_duration=request.max_duration,
-        energy_cost=request.energy_cost,
-        preferred_time_slots=request.preferred_time_slots or ["flexible"],
-        impact_on_health=request.impacts.health,
-        impact_on_productivity=request.impacts.productivity,
-        impact_on_learning=request.impacts.learning,
-        impact_on_wellness=request.impacts.wellness,
-        impact_on_social=request.impacts.social,
+        min_duration=request.durationMin,
+        typical_duration=request.durationMin,  # Mapping to min since typical is gone in new schema
+        max_duration=request.durationMax,
+        energy_cost=request.energyCost,
+        preferred_time_slots=request.preferredTimeSlots or ["flexible"],
+        is_active=request.isActive,
     )
+    
+    # Map impacts from array to flat fields
+    # We need objective types for this
+    obj_result = await db.execute(select(Objective).where(Objective.user_id == current_user.id))
+    objectives = {obj.id: obj.type.value if hasattr(obj.type, "value") else str(obj.type) for obj in obj_result.scalars().all()}
+    
+    if request.objectiveImpacts:
+        for impact in request.objectiveImpacts:
+            obj_type = objectives.get(impact.objectiveId)
+            if obj_type == "health": behavior.impact_on_health = impact.impactScore
+            elif obj_type == "productivity": behavior.impact_on_productivity = impact.impactScore
+            elif obj_type == "learning": behavior.impact_on_learning = impact.impactScore
+            elif obj_type == "wellness": behavior.impact_on_wellness = impact.impactScore
+            elif obj_type == "social": behavior.impact_on_social = impact.impactScore
+
     db.add(behavior)
     await db.commit()
     await db.refresh(behavior)
 
-    return BehaviorResponse(
-        id=behavior.id,
-        name=behavior.name,
-        description=behavior.description,
-        category=behavior.category.value,
-        min_duration=behavior.min_duration,
-        typical_duration=behavior.typical_duration,
-        max_duration=behavior.max_duration,
-        energy_cost=behavior.energy_cost,
-        is_active=behavior.is_active,
-        preferred_time_slots=[s.value for s in behavior.preferred_time_slots],
-        impacts=BehaviorImpacts(
-            health=behavior.impact_on_health,
-            productivity=behavior.impact_on_productivity,
-            learning=behavior.impact_on_learning,
-            wellness=behavior.impact_on_wellness,
-            social=behavior.impact_on_social,
-        ),
-        created_at=behavior.created_at,
-        updated_at=behavior.updated_at,
-    )
+    objective_map = {v: k for k, v in objectives.items()}
+    return ApiResponse(
+        data=map_behavior_to_response(behavior, objective_map=objective_map),
+        message="Behavior created successfully"
+    ).dict(exclude_none=True)
 
 
-
-@router.get("/objectives", response_model=dict)
+@router.get("/objectives", response_model=ApiResponse[List[dict]])
 async def list_objectives(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -164,25 +186,23 @@ async def list_objectives(
     )
     objectives = result.scalars().all()
 
-    return {
-        "data": [
+    return ApiResponse(
+        data=[
             {
                 "id": str(obj.id),
                 "userId": str(obj.user_id),
-                "name": obj.type.value,
+                "name": obj.type.value if hasattr(obj.type, "value") else str(obj.type),
                 "description": obj.description,
-                "priority": int(obj.weight * 10),  # Map weight 0-1 to priority 1-10
+                "priority": int((obj.weight or 0.5) * 10),
                 "createdAt": obj.created_at.isoformat(),
             }
             for obj in objectives
         ],
-        "success": True,
-        "message": "Objectives retrieved successfully",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+        message="Objectives retrieved successfully"
+    ).dict(exclude_none=True)
 
 
-@router.get("/{behavior_id}", response_model=BehaviorResponse)
+@router.get("/{behavior_id}", response_model=ApiResponse[BehaviorResponse])
 async def get_behavior(
     behavior_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -199,30 +219,13 @@ async def get_behavior(
     if not behavior:
         raise HTTPException(status_code=404, detail="Behavior not found")
 
-    return BehaviorResponse(
-        id=behavior.id,
-        name=behavior.name,
-        description=behavior.description,
-        category=behavior.category.value,
-        min_duration=behavior.min_duration,
-        typical_duration=behavior.typical_duration,
-        max_duration=behavior.max_duration,
-        energy_cost=behavior.energy_cost,
-        is_active=behavior.is_active,
-        preferred_time_slots=[s.value for s in behavior.preferred_time_slots],
-        impacts=BehaviorImpacts(
-            health=behavior.impact_on_health,
-            productivity=behavior.impact_on_productivity,
-            learning=behavior.impact_on_learning,
-            wellness=behavior.impact_on_wellness,
-            social=behavior.impact_on_social,
-        ),
-        created_at=behavior.created_at,
-        updated_at=behavior.updated_at,
-    )
+    objective_map = await get_objective_map(db, current_user.id)
+    return ApiResponse(
+        data=map_behavior_to_response(behavior, objective_map=objective_map)
+    ).dict(exclude_none=True)
 
 
-@router.put("/{behavior_id}", response_model=BehaviorResponse)
+@router.put("/{behavior_id}", response_model=ApiResponse[BehaviorResponse])
 async def update_behavior(
     behavior_id: UUID,
     request: BehaviorUpdate,
@@ -247,55 +250,45 @@ async def update_behavior(
         behavior.description = request.description
     if request.category is not None:
         behavior.category = request.category
-    if request.min_duration is not None:
-        behavior.min_duration = request.min_duration
-    if request.typical_duration is not None:
-        behavior.typical_duration = request.typical_duration
-    if request.max_duration is not None:
-        behavior.max_duration = request.max_duration
-    if request.energy_cost is not None:
-        behavior.energy_cost = request.energy_cost
-    if request.preferred_time_slots is not None:
-        behavior.preferred_time_slots = request.preferred_time_slots
-    if request.impacts is not None:
-        behavior.impact_on_health = request.impacts.health
-        behavior.impact_on_productivity = request.impacts.productivity
-        behavior.impact_on_learning = request.impacts.learning
-        behavior.impact_on_wellness = request.impacts.wellness
-        behavior.impact_on_social = request.impacts.social
+    if request.durationMin is not None:
+        behavior.min_duration = request.durationMin
+    if request.durationMax is not None:
+        behavior.max_duration = request.durationMax
+    if request.energyCost is not None:
+        behavior.energy_cost = request.energyCost
+    if request.preferredTimeSlots is not None:
+        behavior.preferred_time_slots = request.preferredTimeSlots
+    if request.isActive is not None:
+        behavior.is_active = request.isActive
+
+    if request.objectiveImpacts is not None:
+        obj_result = await db.execute(select(Objective).where(Objective.user_id == current_user.id))
+        objectives = {obj.id: obj.type.value if hasattr(obj.type, "value") else str(obj.type) for obj in obj_result.scalars().all()}
+        
+        for impact in request.objectiveImpacts:
+            obj_type = objectives.get(impact.objectiveId)
+            if obj_type == "health": behavior.impact_on_health = impact.impactScore
+            elif obj_type == "productivity": behavior.impact_on_productivity = impact.impactScore
+            elif obj_type == "learning": behavior.impact_on_learning = impact.impactScore
+            elif obj_type == "wellness": behavior.impact_on_wellness = impact.impactScore
+            elif obj_type == "social": behavior.impact_on_social = impact.impactScore
 
     await db.commit()
     await db.refresh(behavior)
 
-    return BehaviorResponse(
-        id=behavior.id,
-        name=behavior.name,
-        description=behavior.description,
-        category=behavior.category.value,
-        min_duration=behavior.min_duration,
-        typical_duration=behavior.typical_duration,
-        max_duration=behavior.max_duration,
-        energy_cost=behavior.energy_cost,
-        is_active=behavior.is_active,
-        preferred_time_slots=[s.value for s in behavior.preferred_time_slots],
-        impacts=BehaviorImpacts(
-            health=behavior.impact_on_health,
-            productivity=behavior.impact_on_productivity,
-            learning=behavior.impact_on_learning,
-            wellness=behavior.impact_on_wellness,
-            social=behavior.impact_on_social,
-        ),
-        created_at=behavior.created_at,
-        updated_at=behavior.updated_at,
-    )
+    objective_map = await get_objective_map(db, current_user.id)
+    return ApiResponse(
+        data=map_behavior_to_response(behavior, objective_map=objective_map),
+        message="Behavior updated successfully"
+    ).dict(exclude_none=True)
 
 
-@router.delete("/{behavior_id}", status_code=204)
+@router.delete("/{behavior_id}", response_model=ApiResponse[dict])
 async def delete_behavior(
     behavior_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-) -> None:
+) -> dict:
     """Delete a behavior."""
     result = await db.execute(
         select(Behavior).where(
@@ -309,3 +302,9 @@ async def delete_behavior(
 
     await db.delete(behavior)
     await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message="Behavior deleted successfully",
+        data={"id": str(behavior_id)}
+    ).dict(exclude_none=True)

@@ -1,7 +1,7 @@
 """Completion tracking model."""
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,7 +14,7 @@ class CompletionLog(Base):
 
     __tablename__ = "completion_logs"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="CASCADE"))
     optimization_run_id: Mapped[Optional[UUID]] = mapped_column(

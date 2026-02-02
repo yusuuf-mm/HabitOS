@@ -10,14 +10,29 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
+# Engine configuration
+engine_kwargs = {
+    "echo": settings.DEBUG,
+}
+
+if not str(settings.DATABASE_URL).startswith("sqlite"):
+    engine_kwargs.update({
+        "pool_size": settings.DATABASE_POOL_SIZE,
+        "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+        "pool_pre_ping": settings.DATABASE_POOL_PRE_PING,
+    })
+else:
+    from sqlalchemy.pool import StaticPool
+    engine_kwargs["poolclass"] = StaticPool
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+if settings.TESTING and not str(settings.DATABASE_URL).startswith("sqlite"):
+    engine_kwargs["poolclass"] = NullPool
+
 # Create async engine
 engine = create_async_engine(
     str(settings.DATABASE_URL),
-    echo=settings.DEBUG,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    pool_pre_ping=settings.DATABASE_POOL_PRE_PING,
-    poolclass=NullPool if settings.TESTING else None,
+    **engine_kwargs
 )
 
 # Create async session factory

@@ -1,6 +1,7 @@
 """Dependency injection utilities."""
 import logging
 from typing import Annotated, Optional
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
@@ -46,7 +47,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == UUID(user_id)))
     user = result.scalars().first()
 
     if user is None:
@@ -86,7 +87,7 @@ async def get_optional_user(
     except Exception:
         return None
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == UUID(user_id)))
     return result.scalars().first()
 
 

@@ -14,16 +14,22 @@ from .behavior import (
     BehaviorResponse,
     BehaviorListResponse,
     BehaviorStatistics,
-    BehaviorImpacts,
+    ObjectiveImpactCreate,
+    ObjectiveImpactResponse,
 )
 from .optimization import (
     OptimizationRequest,
     OptimizationResult,
-    OptimizationSummary,
+    OptimizationRunResponse,
     OptimizationHistoryResponse,
     ScheduledBehaviorResponse,
-    ObjectiveContributionsResponse,
+    ObjectiveContributionSchema,
     InfeasibilityDiagnostics,
+)
+from .tracking import (
+    CompletionLogCreate,
+    CompletionLogUpdate,
+    CompletionLogResponse,
 )
 from .common import (
     ErrorResponse,
@@ -31,6 +37,7 @@ from .common import (
     PaginationParams,
     HealthCheckResponse,
 )
+from .api import ApiResponse
 
 __all__ = [
     "UserRegistration",
@@ -45,16 +52,20 @@ __all__ = [
     "BehaviorResponse",
     "BehaviorListResponse",
     "BehaviorStatistics",
-    "BehaviorImpacts",
+    "ObjectiveImpactSchema",
     "OptimizationRequest",
     "OptimizationResult",
-    "OptimizationSummary",
+    "OptimizationRunResponse",
     "OptimizationHistoryResponse",
     "ScheduledBehaviorResponse",
-    "ObjectiveContributionsResponse",
+    "ObjectiveContributionSchema",
     "InfeasibilityDiagnostics",
+    "CompletionLogCreate",
+    "CompletionLogUpdate",
+    "CompletionLogResponse",
     "ErrorResponse",
     "SuccessResponse",
     "PaginationParams",
     "HealthCheckResponse",
+    "ApiResponse",
 ]

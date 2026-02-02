@@ -2,10 +2,11 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignKey, ARRAY, Index, Enum as SQLEnum
+from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignKey, Index, Enum as SQLEnum, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import ARRAY
 
 from app.db.database import Base
 
@@ -35,7 +36,7 @@ class Behavior(Base):
 
     __tablename__ = "behaviors"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -46,7 +47,8 @@ class Behavior(Base):
     energy_cost: Mapped[float] = mapped_column(Float, default=1.0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     preferred_time_slots: Mapped[list[TimeSlot]] = mapped_column(
-        ARRAY(SQLEnum(TimeSlot)), default=[TimeSlot.FLEXIBLE]
+        ARRAY(SQLEnum(TimeSlot)).with_variant(JSON, "sqlite"), 
+        default=[TimeSlot.FLEXIBLE]
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
