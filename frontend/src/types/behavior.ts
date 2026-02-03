@@ -5,7 +5,8 @@ export type BehaviorCategory =
   | "social"
   | "financial"
   | "creativity"
-  | "mindfulness";
+  | "mindfulness"
+  | "wellness";
 
 export type TimeSlot =
   | "early_morning"
@@ -13,7 +14,8 @@ export type TimeSlot =
   | "midday"
   | "afternoon"
   | "evening"
-  | "night";
+  | "night"
+  | "flexible";
 
 export interface ObjectiveImpact {
   objectiveId: string;

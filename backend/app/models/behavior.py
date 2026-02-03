@@ -19,12 +19,17 @@ class BehaviorCategory(str, Enum):
     LEARNING = "learning"
     WELLNESS = "wellness"
     SOCIAL = "social"
+    FINANCIAL = "financial"
+    CREATIVITY = "creativity"
+    MINDFULNESS = "mindfulness"
 
 
 class TimeSlot(str, Enum):
     """Preferred time slots for behaviors."""
 
+    EARLY_MORNING = "early_morning"
     MORNING = "morning"
+    MIDDAY = "midday"
     AFTERNOON = "afternoon"
     EVENING = "evening"
     NIGHT = "night"
@@ -62,6 +67,9 @@ class Behavior(Base):
     impact_on_learning: Mapped[float] = mapped_column(Float, default=0.0)
     impact_on_wellness: Mapped[float] = mapped_column(Float, default=0.0)
     impact_on_social: Mapped[float] = mapped_column(Float, default=0.0)
+    impact_on_financial: Mapped[float] = mapped_column(Float, default=0.0)
+    impact_on_creativity: Mapped[float] = mapped_column(Float, default=0.0)
+    impact_on_mindfulness: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="behaviors")
@@ -82,6 +90,9 @@ class Behavior(Base):
             "learning": self.impact_on_learning,
             "wellness": self.impact_on_wellness,
             "social": self.impact_on_social,
+            "financial": self.impact_on_financial,
+            "creativity": self.impact_on_creativity,
+            "mindfulness": self.impact_on_mindfulness,
         }
         return impacts.get(objective_type, 0.0)
 
@@ -93,4 +104,7 @@ class Behavior(Base):
             "learning": self.impact_on_learning,
             "wellness": self.impact_on_wellness,
             "social": self.impact_on_social,
+            "financial": self.impact_on_financial,
+            "creativity": self.impact_on_creativity,
+            "mindfulness": self.impact_on_mindfulness,
         }

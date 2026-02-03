@@ -20,7 +20,7 @@ export function useAuth() {
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem("authToken");
-      
+
       if (token) {
         // Token exists, user is authenticated
         setLoading(false);
@@ -38,11 +38,12 @@ export function useAuth() {
       try {
         const response = await apiClient.auth.login(credentials);
         // Save token to localStorage
-        localStorage.setItem("authToken", response.access_token);
+        localStorage.setItem("authToken", response.accessToken);
         // Update auth store
         const authTokens: any = {
-          accessToken: response.access_token,
-          refreshToken: response.token_type,
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+          tokenType: response.tokenType,
           expiresAt: Date.now() + 3600000, // 1 hour
         };
         storeLogin(response.user, authTokens);
@@ -63,11 +64,12 @@ export function useAuth() {
       try {
         const response = await apiClient.auth.register(payload);
         // Save token to localStorage
-        localStorage.setItem("authToken", response.access_token);
+        localStorage.setItem("authToken", response.accessToken);
         // Update auth store
         const authTokens: any = {
-          accessToken: response.access_token,
-          refreshToken: response.token_type,
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+          tokenType: response.tokenType,
           expiresAt: Date.now() + 3600000, // 1 hour
         };
         storeLogin(response.user, authTokens);

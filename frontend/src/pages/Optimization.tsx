@@ -20,9 +20,9 @@ export default function Optimization() {
           apiClient.optimization.getOptimizationHistory(),
           apiClient.analytics.getAnalytics("7d"),
         ]);
-        
-        if (historyRes.data.length > 0) {
-          setLastRun(historyRes.data[0]);
+
+        if (historyRes.data.data && historyRes.data.data.length > 0) {
+          setLastRun(historyRes.data.data[0]);
         }
         setAnalytics(analyticsRes.data);
       } catch (error) {

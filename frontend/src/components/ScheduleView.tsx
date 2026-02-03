@@ -17,6 +17,7 @@ const TIME_SLOT_CONFIG: Record<TimeSlot, { label: string; hours: string }> = {
   afternoon: { label: "Afternoon", hours: "14:00 - 17:00" },
   evening: { label: "Evening", hours: "17:00 - 21:00" },
   night: { label: "Night", hours: "21:00+" },
+  flexible: { label: "Flexible", hours: "Anytime" },
 };
 
 const SLOT_ORDER: TimeSlot[] = [
@@ -26,6 +27,7 @@ const SLOT_ORDER: TimeSlot[] = [
   "afternoon",
   "evening",
   "night",
+  "flexible",
 ];
 
 interface GroupedSchedule {
@@ -41,6 +43,7 @@ function groupByTimeSlot(behaviors: ScheduledBehavior[]): GroupedSchedule[] {
     afternoon: [],
     evening: [],
     night: [],
+    flexible: [],
   };
 
   behaviors.forEach((b) => {

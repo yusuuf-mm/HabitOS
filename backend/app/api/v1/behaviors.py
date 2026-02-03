@@ -61,20 +61,20 @@ def map_behavior_to_response(behavior: Behavior, stats: tuple = None, objective_
 
     return BehaviorResponse(
         id=behavior.id,
-        userId=behavior.user_id,
+        user_id=behavior.user_id,
         name=behavior.name,
         description=behavior.description,
         category=behavior.category.value if hasattr(behavior.category, "value") else str(behavior.category),
-        energyCost=behavior.energy_cost,
-        durationMin=behavior.min_duration,
-        durationMax=behavior.max_duration,
-        preferredTimeSlots=[s.value if hasattr(s, "value") else str(s) for s in behavior.preferred_time_slots],
-        objectiveImpacts=impacts,
-        isActive=behavior.is_active,
+        energy_cost=behavior.energy_cost,
+        duration_min=behavior.min_duration,
+        duration_max=behavior.max_duration,
+        preferred_time_slots=[s.value if hasattr(s, "value") else str(s) for s in behavior.preferred_time_slots],
+        objective_impacts=impacts,
+        is_active=behavior.is_active,
         frequency=getattr(behavior, "frequency", "daily"),
-        frequencyCount=getattr(behavior, "frequency_count", None),
-        createdAt=behavior.created_at,
-        updatedAt=behavior.updated_at,
+        frequency_count=getattr(behavior, "frequency_count", None),
+        created_at=behavior.created_at,
+        updated_at=behavior.updated_at,
         statistics=statistics,
     )
 
@@ -127,7 +127,7 @@ async def list_behaviors(
             data=items
         ),
         message=f"Retrieved {len(items)} behaviors"
-    ).dict(exclude_none=True)
+    )
 
 
 @router.post("", response_model=ApiResponse[BehaviorResponse], status_code=201)
@@ -163,6 +163,9 @@ async def create_behavior(
             elif obj_type == "learning": behavior.impact_on_learning = impact.impactScore
             elif obj_type == "wellness": behavior.impact_on_wellness = impact.impactScore
             elif obj_type == "social": behavior.impact_on_social = impact.impactScore
+            elif obj_type == "financial": behavior.impact_on_financial = impact.impactScore
+            elif obj_type == "creativity": behavior.impact_on_creativity = impact.impactScore
+            elif obj_type == "mindfulness": behavior.impact_on_mindfulness = impact.impactScore
 
     db.add(behavior)
     await db.commit()
@@ -172,7 +175,7 @@ async def create_behavior(
     return ApiResponse(
         data=map_behavior_to_response(behavior, objective_map=objective_map),
         message="Behavior created successfully"
-    ).dict(exclude_none=True)
+    )
 
 
 @router.get("/objectives", response_model=ApiResponse[List[dict]])
@@ -222,7 +225,7 @@ async def get_behavior(
     objective_map = await get_objective_map(db, current_user.id)
     return ApiResponse(
         data=map_behavior_to_response(behavior, objective_map=objective_map)
-    ).dict(exclude_none=True)
+    )
 
 
 @router.put("/{behavior_id}", response_model=ApiResponse[BehaviorResponse])
@@ -272,6 +275,9 @@ async def update_behavior(
             elif obj_type == "learning": behavior.impact_on_learning = impact.impactScore
             elif obj_type == "wellness": behavior.impact_on_wellness = impact.impactScore
             elif obj_type == "social": behavior.impact_on_social = impact.impactScore
+            elif obj_type == "financial": behavior.impact_on_financial = impact.impactScore
+            elif obj_type == "creativity": behavior.impact_on_creativity = impact.impactScore
+            elif obj_type == "mindfulness": behavior.impact_on_mindfulness = impact.impactScore
 
     await db.commit()
     await db.refresh(behavior)
@@ -307,4 +313,4 @@ async def delete_behavior(
         success=True,
         message="Behavior deleted successfully",
         data={"id": str(behavior_id)}
-    ).dict(exclude_none=True)
+    )

@@ -1,28 +1,61 @@
 """Analytics schemas."""
-from datetime import date
+from datetime import date, datetime
 from typing import List, Literal
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DashboardStats(BaseModel):
     """Dashboard statistics."""
 
-    total_behaviors: int
-    active_behaviors: int
-    total_optimization_runs: int
-    completion_rate: float
-    average_score: float
-    streak_days: int
+    totalBehaviors: int = Field(..., validation_alias="total_behaviors", serialization_alias="totalBehaviors")
+    activeBehaviors: int = Field(..., validation_alias="active_behaviors", serialization_alias="activeBehaviors")
+    totalOptimizationRuns: int = Field(..., validation_alias="total_optimization_runs", serialization_alias="totalOptimizationRuns")
+    completionRate: float = Field(..., validation_alias="completion_rate", serialization_alias="completionRate")
+    averageScore: float = Field(..., validation_alias="average_score", serialization_alias="averageScore")
+    streakDays: int = Field(..., validation_alias="streak_days", serialization_alias="streakDays")
+
+    class Config:
+        populate_by_name = True
+
+
+class DashboardScheduledBehavior(BaseModel):
+    """Scheduled behavior for dashboard summary."""
+
+    id: UUID
+    behavior_name: str = Field(..., serialization_alias="behaviorName")
+    time_slot: str = Field(..., serialization_alias="timeSlot")
+    start_time: str = Field(..., serialization_alias="startTime")
+    is_completed: bool = Field(..., serialization_alias="isCompleted")
+
+    class Config:
+        populate_by_name = True
+
+
+class DashboardBehavior(BaseModel):
+    """Behavior for dashboard summary."""
+
+    id: UUID
+    name: str
+    category: str
+    is_active: bool = Field(..., serialization_alias="isActive")
+    created_at: datetime = Field(..., serialization_alias="createdAt")
+
+    class Config:
+        populate_by_name = True
 
 
 class DashboardSummary(BaseModel):
     """Dashboard summary."""
 
     stats: DashboardStats
-    recent_optimizations: List["OptimizationSummary"]  # Forward ref to avoid circular import if needed
-    recent_behaviors: List["BehaviorResponse"]
-    today_schedule: List["ScheduledBehaviorResponse"]
+    recentOptimizations: List["OptimizationSummary"] = Field(..., validation_alias="recent_optimizations", serialization_alias="recentOptimizations")
+    recentBehaviors: List[DashboardBehavior] = Field(..., validation_alias="recent_behaviors", serialization_alias="recentBehaviors")
+    todaySchedule: List[DashboardScheduledBehavior] = Field(..., validation_alias="today_schedule", serialization_alias="todaySchedule")
+
+    class Config:
+        populate_by_name = True
 
 
 class BehaviorCompletion(BaseModel):
@@ -36,9 +69,12 @@ class BehaviorCompletion(BaseModel):
 class ObjectiveProgress(BaseModel):
     """Objective progress data."""
 
-    objective_name: str
+    objectiveName: str = Field(..., validation_alias="objective_name", serialization_alias="objectiveName")
     progress: float
     trend: Literal["up", "down", "stable"]
+
+    class Config:
+        populate_by_name = True
 
 
 class CategoryDistribution(BaseModel):
@@ -53,18 +89,24 @@ class EnergyUsage(BaseModel):
     """Energy usage data."""
 
     date: date
-    energy_spent: int
-    energy_budget: int
+    energySpent: int = Field(..., validation_alias="energy_spent", serialization_alias="energySpent")
+    energyBudget: int = Field(..., validation_alias="energy_budget", serialization_alias="energyBudget")
+
+    class Config:
+        populate_by_name = True
 
 
 class AnalyticsData(BaseModel):
     """Analytics data."""
 
     period: str
-    behavior_completions: List[BehaviorCompletion]
-    objective_progress: List[ObjectiveProgress]
-    category_distribution: List[CategoryDistribution]
-    energy_usage: List[EnergyUsage]
+    behaviorCompletions: List[BehaviorCompletion] = Field(..., validation_alias="behavior_completions", serialization_alias="behaviorCompletions")
+    objectiveProgress: List[ObjectiveProgress] = Field(..., validation_alias="objective_progress", serialization_alias="objectiveProgress")
+    categoryDistribution: List[CategoryDistribution] = Field(..., validation_alias="category_distribution", serialization_alias="categoryDistribution")
+    energyUsage: List[EnergyUsage] = Field(..., validation_alias="energy_usage", serialization_alias="energyUsage")
+
+    class Config:
+        populate_by_name = True
 
 
 # Resolve forward references

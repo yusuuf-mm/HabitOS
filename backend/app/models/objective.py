@@ -18,6 +18,9 @@ class ObjectiveType(str, Enum):
     LEARNING = "learning"
     WELLNESS = "wellness"
     SOCIAL = "social"
+    FINANCIAL = "financial"
+    CREATIVITY = "creativity"
+    MINDFULNESS = "mindfulness"
 
 
 class Objective(Base):
@@ -48,7 +51,7 @@ class Objective(Base):
     @classmethod
     def get_default_objectives(cls) -> dict:
         """Get default objectives with sensible weights."""
-        total = 5  # Number of objective types
+        total = 8  # Number of objective types
         weight = 1.0 / total
         return {
             ObjectiveType.HEALTH: weight,
@@ -56,6 +59,9 @@ class Objective(Base):
             ObjectiveType.LEARNING: weight,
             ObjectiveType.WELLNESS: weight,
             ObjectiveType.SOCIAL: weight,
+            ObjectiveType.FINANCIAL: weight,
+            ObjectiveType.CREATIVITY: weight,
+            ObjectiveType.MINDFULNESS: weight,
         }
 
     @staticmethod

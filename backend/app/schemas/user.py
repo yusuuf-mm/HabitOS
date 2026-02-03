@@ -48,7 +48,6 @@ class UserUpdate(BaseModel):
             raise ValueError("Password must contain at least one digit")
         return v
 
-
 class UserResponse(BaseModel):
     """User response."""
 
@@ -57,8 +56,8 @@ class UserResponse(BaseModel):
     name: str
     avatar: Optional[str] = None
     status: str
-    createdAt: datetime = Field(..., validation_alias="created_at")
-    updatedAt: datetime = Field(..., validation_alias="updated_at")
+    createdAt: datetime = Field(..., validation_alias="created_at", serialization_alias="createdAt")
+    updatedAt: datetime = Field(..., validation_alias="updated_at", serialization_alias="updatedAt")
 
     class Config:
         """Pydantic config."""
@@ -70,20 +69,25 @@ class UserResponse(BaseModel):
 class TokenRefreshRequest(BaseModel):
     """Token refresh request."""
 
-    refreshToken: str = Field(..., validation_alias="refresh_token")
+    refreshToken: str = Field(..., validation_alias="refresh_token", serialization_alias="refreshToken")
+
+    class Config:
+        """Pydantic config."""
+        
+        populate_by_name = True
 
 
 class TokenRefreshResponse(BaseModel):
     """Token refresh response."""
 
-    accessToken: str = Field(..., validation_alias="access_token")
-    tokenType: str = Field("bearer", validation_alias="token_type")
+    accessToken: str = Field(..., validation_alias="access_token", serialization_alias="accessToken")
+    tokenType: str = Field("bearer", validation_alias="token_type", serialization_alias="tokenType")
 
 
 class AuthResponse(BaseModel):
     """Authentication response."""
 
-    accessToken: str = Field(..., validation_alias="access_token")
-    refreshToken: str = Field(..., validation_alias="refresh_token")
-    tokenType: str = Field("bearer", validation_alias="token_type")
+    accessToken: str = Field(..., validation_alias="access_token", serialization_alias="accessToken")
+    refreshToken: str = Field(..., validation_alias="refresh_token", serialization_alias="refreshToken")
+    tokenType: str = Field("bearer", validation_alias="token_type", serialization_alias="tokenType")
     user: UserResponse

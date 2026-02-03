@@ -1,0 +1,28 @@
+{
+  "name": "habitos",
+  "version": "1.0.0",
+  "description": "**A production-grade Operations Research + AI Engineering platform for optimizing daily behaviors and life goals.**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix frontend\" \"cd backend && make run\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yusuuf-mm/HabitOS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/yusuuf-mm/HabitOS/issues"
+  },
+  "homepage": "https://github.com/yusuuf-mm/HabitOS#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

@@ -10,23 +10,28 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
+# Check if using SQLite
+is_sqlite = str(settings.DATABASE_URL).startswith("sqlite")
+
 # Engine configuration
 engine_kwargs = {
     "echo": settings.DEBUG,
 }
 
-if not str(settings.DATABASE_URL).startswith("sqlite"):
+if is_sqlite:
+    from sqlalchemy.pool import StaticPool
+    engine_kwargs.update({
+        "poolclass": StaticPool,
+        "connect_args": {"check_same_thread": False},
+    })
+else:
     engine_kwargs.update({
         "pool_size": settings.DATABASE_POOL_SIZE,
         "max_overflow": settings.DATABASE_MAX_OVERFLOW,
         "pool_pre_ping": settings.DATABASE_POOL_PRE_PING,
     })
-else:
-    from sqlalchemy.pool import StaticPool
-    engine_kwargs["poolclass"] = StaticPool
-    engine_kwargs["connect_args"] = {"check_same_thread": False}
 
-if settings.TESTING and not str(settings.DATABASE_URL).startswith("sqlite"):
+if settings.TESTING and not is_sqlite:
     engine_kwargs["poolclass"] = NullPool
 
 # Create async engine

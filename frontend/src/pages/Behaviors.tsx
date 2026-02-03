@@ -33,7 +33,7 @@ export default function Behaviors() {
         apiClient.behaviors.getBehaviors(),
         apiClient.behaviors.getObjectives(),
       ]);
-      setBehaviors(behaviorsRes.data);
+      setBehaviors(behaviorsRes.data.data);
       setObjectives(objectivesRes.data);
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -71,7 +71,7 @@ export default function Behaviors() {
 
   const handleUpdate = async (data: BehaviorFormData) => {
     if (!editingBehavior) return;
-    
+
     setIsSubmitting(true);
     try {
       const response = await apiClient.behaviors.updateBehavior(

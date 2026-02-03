@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         case_sensitive=True,
+        env_file=".env",
+        env_file_encoding="utf-8",
     )
 
     # Application
@@ -48,16 +50,16 @@ class Settings(BaseSettings):
     BCRYPT_ROUNDS: int = Field(default=12, env="BCRYPT_ROUNDS")
 
     # CORS
-    CORS_ORIGINS: List[str] = Field(
+    CORS_ORIGINS: List[str] | str = Field(
         default=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:8081"],
         env="CORS_ORIGINS",
     )
     CORS_ALLOW_CREDENTIALS: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
-    CORS_ALLOW_METHODS: List[str] = Field(
+    CORS_ALLOW_METHODS: List[str] | str = Field(
         default=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         env="CORS_ALLOW_METHODS",
     )
-    CORS_ALLOW_HEADERS: List[str] = Field(
+    CORS_ALLOW_HEADERS: List[str] | str = Field(
         default=["*"],
         env="CORS_ALLOW_HEADERS",
     )
@@ -87,28 +89,23 @@ class Settings(BaseSettings):
     # Testing
     TESTING: bool = Field(default=False, env="TESTING")
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("CORS_ORIGINS", "CORS_ALLOW_METHODS", "CORS_ALLOW_HEADERS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from comma-separated string."""
+    def parse_comma_separated_list(cls, v):
+        """Parse comma-separated string or JSON list into a list of strings."""
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
-
-    @field_validator("CORS_ALLOW_METHODS", mode="before")
-    @classmethod
-    def parse_cors_methods(cls, v):
-        """Parse CORS methods from comma-separated string."""
-        if isinstance(v, str):
-            return [method.strip() for method in v.split(",")]
-        return v
-
-    @field_validator("CORS_ALLOW_HEADERS", mode="before")
-    @classmethod
-    def parse_cors_headers(cls, v):
-        """Parse CORS headers from comma-separated string."""
-        if isinstance(v, str):
-            return [header.strip() for header in v.split(",")]
+            v = v.strip()
+            if not v:
+                return []
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    v = json.loads(v)
+                except json.JSONDecodeError:
+                    pass
+            
+            if isinstance(v, str):
+                return [item.strip() for item in v.split(",") if item.strip()]
         return v
 
 

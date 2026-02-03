@@ -99,24 +99,24 @@ const generateId = (prefix: string) =>
 // =============================================================================
 
 export const authApi = {
-  async login(credentials: UserCredentials): Promise<{ access_token: string; token_type: string; user: User }> {
+  async login(credentials: UserCredentials): Promise<{ accessToken: string; refreshToken: string; tokenType: string; user: User }> {
     return apiCall("/auth/login", {
       method: "POST",
       body: JSON.stringify(credentials),
     });
   },
 
-  async register(payload: RegisterPayload): Promise<{ access_token: string; token_type: string; user: User }> {
+  async register(payload: RegisterPayload): Promise<{ accessToken: string; refreshToken: string; tokenType: string; user: User }> {
     return apiCall("/auth/register", {
       method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  async refreshToken(refreshToken: string): Promise<{ access_token: string; token_type: string }> {
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string; tokenType: string }> {
     return apiCall("/auth/refresh", {
       method: "POST",
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ refreshToken }),
     });
   },
 

@@ -8,8 +8,8 @@ async def test_get_objectives(auth_client: AsyncClient):
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
-    # Default objectives (health, productivity, learning, wellness, social)
-    assert len(data["data"]) == 5
+    # All 8 objective types (health, productivity, learning, wellness, social, financial, creativity, mindfulness)
+    assert len(data["data"]) == 8
     types = [obj["name"] for obj in data["data"]]
     assert "health" in types
     assert "productivity" in types

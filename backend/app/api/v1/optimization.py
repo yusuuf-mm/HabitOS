@@ -40,35 +40,50 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/optimization", tags=["optimization"])
 
 
-async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User) -> OptimizationRunResponse:
+async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User, include_schedule: bool = True) -> OptimizationRunResponse:
     """Map OptimizationRun model to OptimizationRunResponse schema."""
     # Fetch scheduled behaviors with their behavior details
     scheduled_result = await db.execute(
         select(ScheduledBehavior, Behavior)
         .join(Behavior)
         .where(ScheduledBehavior.optimization_run_id == run.id)
+        .order_by(ScheduledBehavior.time_period)
     )
     scheduled_items = scheduled_result.all()
     
     objective_map = await get_objective_map(db, user.id)
     
+    # helper for time calculation (15min periods)
+    def period_to_time(p):
+        total_mins = p * 15
+        day_mins = total_mins % 1440
+        h = day_mins // 60
+        m = day_mins % 60
+        return f"{h:02d}:{m:02d}"
+
     scheduled_behaviors = []
+    total_duration = 0
+    total_energy = 0
     for s, b in scheduled_items:
-        # Simplistic mapping of time_period to a TimeSlot or name
-        # In a real app, this should be more consistent
+        duration = s.scheduled_duration
+        start_time = period_to_time(s.time_period)
+        end_time = period_to_time(s.time_period + (duration // 15))
+        
         scheduled_behaviors.append(
             ScheduledBehaviorResponse(
                 id=s.id,
                 behaviorId=s.behavior_id,
                 behavior=map_behavior_to_response(b, objective_map=objective_map),
-                scheduledDate=run.start_date, # Or derive from time_period
-                timeSlot="morning", # Placeholder
-                startTime="09:00",  # Placeholder
-                endTime="10:00",    # Placeholder
-                duration=s.scheduled_duration,
-                isCompleted=False,
+                scheduledDate=run.start_date,
+                timeSlot="flexible", # Standardized for generated schedule
+                startTime=start_time,
+                endTime=end_time,
+                duration=duration,
+                isCompleted=False, # Default for new runs
             )
         )
+        total_duration += duration
+        total_energy += b.energy_cost
 
     # Reconstruct contributions from results JSON
     contributions = []
@@ -85,7 +100,7 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
                     )
                 )
 
-    return OptimizationRunResponse(
+    run_response = OptimizationRunResponse(
         id=run.id,
         user_id=run.user_id,
         status=run.status.value if hasattr(run.status, "value") else str(run.status),
@@ -94,11 +109,28 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
         objective_contributions=contributions,
         total_score=run.total_objective_value or 0.0,
         execution_time_ms=int((run.execution_time_seconds or 0) * 1000),
-        constraints_satisfied=0, # Placeholder
-        constraints_total=0,     # Placeholder
+        constraints_satisfied=len(scheduled_behaviors), # Simplified
+        constraints_total=len(scheduled_behaviors),    # Simplified
         created_at=run.created_at,
         completed_at=run.updated_at,
     )
+    
+    if not include_schedule:
+        return run_response
+
+    from app.schemas.schedule import DailySchedule
+    schedule = DailySchedule(
+        id=run.id,
+        user_id=user.id,
+        date=run.start_date,
+        scheduled_behaviors=scheduled_behaviors,
+        total_duration=total_duration,
+        total_energy_spent=int(total_energy),
+        objective_scores=contributions,
+        created_at=run.created_at,
+    )
+    
+    return run_response, schedule
 
 
 @router.post("/solve", response_model=ApiResponse[OptimizationResult])
@@ -220,10 +252,10 @@ async def solve_optimization(
         await db.refresh(run)
 
         # Build response using helper
-        run_response = await map_run_to_response(db, run, current_user)
+        run_response, schedule = await map_run_to_response(db, run, current_user)
         
         return ApiResponse(
-            data=OptimizationResult(run=run_response),
+            data=OptimizationResult(run=run_response, schedule=schedule),
             message="Optimization completed successfully"
         ).dict(exclude_none=True)
 
@@ -265,7 +297,8 @@ async def get_optimization_history(
 
     items = []
     for run in runs:
-        items.append(await map_run_to_response(db, run, current_user))
+        run_response = await map_run_to_response(db, run, current_user, include_schedule=False)
+        items.append(run_response)
 
     return ApiResponse(
         data=OptimizationHistoryResponse(
@@ -296,8 +329,8 @@ async def get_optimization_run(
     if not run:
         raise HTTPException(status_code=404, detail="Optimization run not found")
 
-    run_response = await map_run_to_response(db, run, current_user)
+    run_response, schedule = await map_run_to_response(db, run, current_user)
     
     return ApiResponse(
-        data=OptimizationResult(run=run_response)
+        data=OptimizationResult(run=run_response, schedule=schedule)
     ).dict(exclude_none=True)

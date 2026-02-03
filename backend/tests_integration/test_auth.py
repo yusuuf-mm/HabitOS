@@ -8,18 +8,16 @@ async def test_register_user(client: AsyncClient):
         "/api/v1/auth/register",
         json={
             "email": "test@example.com",
-            "username": "testuser",
-            "password": "Password123",
-            "first_name": "Test",
-            "last_name": "User"
+            "name": "Test User",
+            "password": "Password123"
         }
     )
     assert response.status_code == 200
     data = response.json()
-    assert "access_token" in data
+    assert "accessToken" in data
     assert "user" in data
     assert data["user"]["email"] == "test@example.com"
-    assert data["user"]["username"] == "testuser"
+    assert data["user"]["name"] == "Test User"
 
 @pytest.mark.asyncio
 async def test_login_user(client: AsyncClient):
@@ -29,7 +27,7 @@ async def test_login_user(client: AsyncClient):
         "/api/v1/auth/register",
         json={
             "email": "login@example.com",
-            "username": "loginuser",
+            "name": "Login User",
             "password": "Password123"
         }
     )
@@ -44,8 +42,8 @@ async def test_login_user(client: AsyncClient):
     )
     assert response.status_code == 200
     data = response.json()
-    assert "access_token" in data
-    assert "refresh_token" in data
+    assert "accessToken" in data
+    assert "refreshToken" in data
 
 @pytest.mark.asyncio
 async def test_login_invalid_credentials(client: AsyncClient):
@@ -67,16 +65,16 @@ async def test_refresh_token(client: AsyncClient):
         "/api/v1/auth/register",
         json={
             "email": "refresh@example.com",
-            "username": "refreshuser",
+            "name": "Refresh User",
             "password": "Password123"
         }
     )
-    refresh_token = reg_response.json()["refresh_token"]
+    refresh_token = reg_response.json()["refreshToken"]
     
     # Refresh
     response = await client.post(
         "/api/v1/auth/refresh",
-        json={"refresh_token": refresh_token}
+        json={"refreshToken": refresh_token}
     )
     assert response.status_code == 200
-    assert "access_token" in response.json()
+    assert "accessToken" in response.json()

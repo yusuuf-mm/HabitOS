@@ -33,7 +33,7 @@ export default function History() {
     const fetchHistory = async () => {
       try {
         const response = await apiClient.optimization.getOptimizationHistory();
-        setRuns(response.data);
+        setRuns(response.data.data);
       } catch (error) {
         console.error("Failed to fetch history:", error);
       } finally {

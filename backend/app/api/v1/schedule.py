@@ -1,7 +1,7 @@
 """Schedule routes."""
 import logging
 from datetime import date, datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +54,7 @@ async def get_daily_schedule(
                 created_at=datetime.now(timezone.utc),
             ),
             message="No schedule found for this date"
-        ).dict(exclude_none=True)
+        )
 
     # 2. Calculate day offset
     day_offset = (target_date - run.start_date).days
@@ -115,6 +115,21 @@ async def get_daily_schedule(
             total_duration += sb.scheduled_duration
             total_energy += behavior.energy_cost
 
+    # Reconstruct contributions for objective_scores
+    contributions = []
+    if run.results and "objective_contributions" in run.results:
+        for obj_type, data in run.results["objective_contributions"].items():
+            obj_id = objective_map.get(obj_type)
+            if obj_id:
+                contributions.append(
+                    ObjectiveContributionSchema(
+                        objectiveId=obj_id,
+                        objectiveName=obj_type.capitalize(),
+                        contribution=data.get("contribution", 0.0),
+                        percentage=data.get("percentage", 0.0)
+                    )
+                )
+
     return ApiResponse(
         data=DailySchedule(
             id=run.id,
@@ -123,11 +138,11 @@ async def get_daily_schedule(
             scheduled_behaviors=response_items,
             total_duration=total_duration,
             total_energy_spent=int(total_energy),
-            objective_scores=[], # Placeholder
+            objective_scores=contributions,
             created_at=run.created_at,
         ),
         message="Schedule retrieved successfully"
-    ).dict(exclude_none=True)
+    )
 
 
 @router.post("/{scheduled_behavior_id}/complete", response_model=ApiResponse[dict])
@@ -158,7 +173,7 @@ async def mark_complete(
             success=True,
             message="Behavior already marked as complete",
             data={}
-        ).dict(exclude_none=True)
+        )
 
     completion_log = CompletionLog(
         user_id=current_user.id,
@@ -174,7 +189,7 @@ async def mark_complete(
         success=True,
         message="Behavior marked as complete",
         data={}
-    ).dict(exclude_none=True)
+    )
 
 
 @router.post("/{scheduled_behavior_id}/incomplete", response_model=ApiResponse[dict])
@@ -209,4 +224,4 @@ async def mark_incomplete(
         success=True,
         message="Behavior marked as incomplete",
         data={}
-    ).dict(exclude_none=True)
+    )

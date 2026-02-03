@@ -82,33 +82,36 @@ components:
     AuthResponse:
       type: object
       properties:
-        access_token:
+        accessToken:
           type: string
-        token_type:
+        refreshToken:
+          type: string
+        tokenType:
           type: string
         user:
           $ref: '#/components/schemas/User'
       required:
-        - access_token
-        - token_type
+        - accessToken
+        - refreshToken
+        - tokenType
         - user
 
     RefreshTokenRequest:
       type: object
       properties:
-        refresh_token:
+        refreshToken:
           type: string
       required:
-        - refresh_token
+        - refreshToken
 
     # Behavior Schemas
     BehaviorCategory:
       type: string
-      enum: [health, productivity, learning, social, financial, creativity, mindfulness]
+      enum: [health, productivity, learning, social, financial, creativity, mindfulness, wellness]
 
     TimeSlot:
       type: string
-      enum: [early_morning, morning, midday, afternoon, evening, night]
+      enum: [early_morning, morning, midday, afternoon, evening, night, flexible]
 
     Objective:
       type: object
@@ -610,9 +613,9 @@ paths:
               schema:
                 type: object
                 properties:
-                  access_token:
+                  accessToken:
                     type: string
-                  token_type:
+                  tokenType:
                     type: string
 
   /auth/logout:
