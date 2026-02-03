@@ -28,8 +28,8 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan."""
     # Startup
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    await init_db()
-    logger.info("Database initialized")
+    # await init_db()  # Disabled: Use Alembic migrations for database schema management
+    # logger.info("Database initialized")
     yield
     # Shutdown
     logger.info("Shutting down application")

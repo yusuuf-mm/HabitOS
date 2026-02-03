@@ -3,7 +3,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: behav-postgres
+    container_name: habitos-db
     environment:
       POSTGRES_USER: ${DB_USER:-user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
@@ -13,14 +13,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user}"]
+      test: ["CMD-SHELL", "pg_isready -U user"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - habitos-network
 
   redis:
     image: redis:7-alpine
-    container_name: behav-redis
+    container_name: habitos-redis
     ports:
       - "6379:6379"
     volumes:
@@ -30,27 +32,48 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - habitos-network
 
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: behav-backend
+    container_name: habitos-api
     environment:
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-user}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-behaviordb}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: production
       DEBUG: "False"
-    ports:
-      - "8000:8000"
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:3000,http://localhost:5173}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - .:/app
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+    networks:
+      - habitos-network
+    # Exposing port internally, frontend Nginx will proxy to it
+    # We can still expose it if we want direct access
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: habitos-ui
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - habitos-network
+
+networks:
+  habitos-network:
+    driver: bridge
 
 volumes:
   postgres_data:

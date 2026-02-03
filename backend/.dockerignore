@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.git/
+.gitignore
+.vscode/
+data/
+habit_os.db
+ habitos.db
+ habitos_test.db
+ habit_os_test.db
