@@ -1,453 +1,188 @@
-# 🎯 Behavioral Optimization Platform
+# 🎯 HabitOS: Behavioral Optimization Platform
+
+<div align="center">
+
+![HabitOS Logo](file:///workspaces/HabitOS/docs/images/logo.png)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 
 **A production-grade Operations Research + AI Engineering platform for optimizing daily behaviors and life goals.**
+
+[Explore Docs](file:///workspaces/HabitOS/docs) • [View API Demo](http://localhost:8000/docs) • [Report Bug](https://github.com/yusuuf-mm/HabitOS/issues)
+
+</div>
+
+---
+
+## 📋 Table of Contents
+- [Project Overview](#-project-overview)
+- [System Architecture](#-system-architecture)
+- [Mathematical Core](#-mathematical-core)
+- [Tech Stack](#-tech-stack)
+- [Quick Start](#-quick-start)
+- [Codespaces Guide](#-codespaces-guide)
+- [Testing Suite](#-testing-suite)
+- [Roadmap](#-roadmap)
 
 ---
 
 ## 📋 Project Overview
 
-This is a **full-stack application** that uses **real mathematical optimization** (not fake AI) to help users:
-- Define behaviors/habits with measurable impacts
-- Set life objectives (health, productivity, learning, wellness, social)
-- Create constraints (time budgets, frequency limits, etc.)
-- **Automatically generate optimal daily schedules** using Linear Programming
+HabitOS is a **full-stack decision support system** that leverages **Mathematical Optimization** (Linear Programming) to transform abstract life goals into concrete, actionable daily schedules.
 
-### 🏆 Key Differentiators
+Unlike traditional habit trackers, HabitOS treats your time and energy as finite resources in an optimization problem, ensuring your daily actions perfectly align with your long-term objectives.
 
-✅ **Real OR Algorithms** - Linear programming with PuLP, not superficial AI  
-✅ **Production-Grade Code** - Type-safe, async, comprehensive error handling  
-✅ **Complete Backend** - FastAPI, SQLAlchemy, PostgreSQL, JWT auth  
-✅ **Professional Frontend** - React, TypeScript, Tailwind CSS  
-✅ **Full-Stack Integration** - Ready for deployment  
+### 🏆 Key Capabilities
+- 🧠 **Dynamic Scheduling**: Automatically generates optimal daily routines based on weighted life objectives.
+- ⚡ **Resource-Aware**: Models energy costs and time budgets for every behavior.
+- 📊 **Impact Modeling**: Quantifies how specific habits (e.g., "Morning Jog") contribute to broad goals (e.g., "Health").
+- 🔒 **Enterprise-Ready**: Includes JWT authentication, Pydantic validation, and comprehensive integration testing.
 
 ---
 
-## 📁 Project Structure
+## 🏗️ System Architecture
 
+HabitOS follows a modern decoupled architecture, ensuring scalability and maintainability.
+
+```mermaid
+graph TD
+    User([User]) <--> Frontend[React SPA]
+    Frontend <--> Proxy[Vite Proxy /api]
+    Proxy <--> API[FastAPI V1]
+    
+    subgraph "Backend Core"
+        API <--> Auth[JWT Auth]
+        API <--> Behaviors[Behavior Engine]
+        API <--> Engine[Optimization Engine]
+        API <--> Analytics[Analytics Service]
+    end
+    
+    Engine <--> Solver[PuLP / CBC Solver]
+    Auth <--> DB[(PostgreSQL / SQLite)]
+    Behaviors <--> DB
+    Analytics <--> DB
 ```
-HabitOS/
-├── frontend/                 # React + TypeScript frontend
-│   ├── src/
-│   │   ├── components/      # React components
-│   │   ├── pages/           # Page routes
-│   │   ├── hooks/           # Custom hooks
-│   │   ├── services/        # API client
-│   │   ├── store/           # State management
-│   │   ├── types/           # TypeScript types
-│   │   └── App.tsx
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.ts
-│   └── tsconfig.json
-│
-├── backend/                  # FastAPI Python backend
-│   ├── app/
-│   │   ├── core/            # Config, security, exceptions
-│   │   ├── db/              # Database layer
-│   │   ├── models/          # SQLAlchemy models (6 models)
-│   │   ├── schemas/         # Pydantic schemas
-│   │   ├── optimization/    # OR engine with solvers
-│   │   ├── api/v1/          # API routes (auth, behaviors, optimization)
-│   │   └── main.py          # FastAPI app
-│   ├── alembic/             # Database migrations
-│   ├── tests/               # Test suite
-│   ├── requirements.txt     # Dependencies
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── Makefile
-│   └── README.md
-│
-└── README.md               # This file
-```
+
+---
+
+## 🧠 Mathematical Core
+
+At its heart, HabitOS uses **Mixed-Integer Linear Programming (MILP)** to solve the Daily Schedule Optimization Problem (DSOP).
+
+### 1. Variables
+- $x_{b,t} \in \{0, 1\}$: Binary variable indicating if behavior $b$ is scheduled at time period $t$.
+- $d_{b,t} \in [min\_dur, max\_dur]$: Continuous variable for the duration of behavior $b$.
+
+### 2. Objective Function
+We maximize the **Total Life Value (TLV)**:
+$$\max \sum_{b \in B} \sum_{t \in T} \left( \sum_{o \in O} w_o \cdot impact_{b,o} \right) \cdot d_{b,t}$$
+Where $w_o$ is the user-defined weight for objective $o$.
+
+### 3. Key Constraints
+- **Time Budget**: $\sum_{b,t} d_{b,t} \leq \text{Available Time}$
+- **Energy Budget**: $\sum_{b,t} energy\_cost_b \cdot d_{b,t} \leq \text{Daily Energy Capacity}$
+- **Exclusivity**: $\sum_{b} x_{b,t} \leq 1$ (Only one behavior at a time)
+- **Preferences**: $x_{b,t} = 0$ if $t \notin \text{Preferred Slots}_b$
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 18, TypeScript, Tailwind CSS, Vite, Lucide Icons |
+| **Backend** | FastAPI, Pydantic V2, SQLAlchemy 2.0, PuLP, Uvicorn |
+| **Database** | PostgreSQL (Production), SQLite/aiosqlite (Dev), Alembic Migrations |
+| **Security** | JWT (HS256), Bcrypt Hashing, CORS, Vite Proxy |
+| **DevOps** | Docker, Docker Compose, Makefile, Pytest, Vitest |
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Node.js 18+ (frontend)
-- Python 3.11+ (backend)
-- PostgreSQL 14+ (database)
-- Docker & Docker Compose (recommended)
-
-### Backend Setup
+### 1. Unified Setup (Recommended)
+You can run both the frontend and backend simultaneously from the root directory:
 
 ```bash
-cd backend
-
-# Install dependencies
-make install
-make dev
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your PostgreSQL credentials
-
-# Setup database
-docker run -d --name postgres \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=behaviordb \
-  -p 5432:5432 \
-  postgres:15-alpine
-
-make db-upgrade
-
-# Run development server
-make run
-```
-
-**Backend runs at:** `http://localhost:8000`
-- API Docs: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-### Frontend Setup
-
-```bash
-cd frontend
-
-# Install dependencies
+# Install root dependencies (concurrently)
 npm install
-# or
-bun install
 
-# Run development server
+# Run full stack
 npm run dev
 ```
 
-**Frontend runs at:** `http://localhost:5173`
-
----
-
-## 🎯 API Endpoints
-
-### Authentication
-```
-POST   /api/v1/auth/register         Register new user
-POST   /api/v1/auth/login            Login
-POST   /api/v1/auth/refresh          Refresh token
-```
-
-### Behaviors
-```
-GET    /api/v1/behaviors             List behaviors
-POST   /api/v1/behaviors             Create behavior
-GET    /api/v1/behaviors/{id}        Get behavior
-PUT    /api/v1/behaviors/{id}        Update behavior
-DELETE /api/v1/behaviors/{id}        Delete behavior
-```
-
-### Optimization
-```
-POST   /api/v1/optimization/solve    Run optimizer
-GET    /api/v1/optimization/history  Get past runs
-```
-
----
-
-## 🏗️ Architecture
-
-### Backend Stack
-- **Framework:** FastAPI
-- **Database:** PostgreSQL + SQLAlchemy ORM
-- **Authentication:** JWT + bcrypt
-- **Optimization:** PuLP + scipy
-- **Async:** asyncio + asyncpg
-- **Validation:** Pydantic
-
-### Frontend Stack
-- **Framework:** React 18 + TypeScript
-- **Styling:** Tailwind CSS
-- **Build:** Vite
-- **API:** Axios/fetch
-- **State:** Context API + hooks
-
-### Database
-- **7 core tables** with relationships
-- **UUID primary keys** throughout
-- **Check constraints** for validation
-- **Triggers** for automatic timestamps
-- **Views** for analytics
-
----
-
-## 📊 Optimization Engine
-
-### How It Works
-
-1. **User Input**
-   - Define behaviors (exercise, study, etc.)
-   - Set objectives with weights (health, productivity, learning, wellness, social)
-   - Create constraints (max 8 hours/day, exercise 3x/week, etc.)
-
-2. **Problem Formulation**
-   - Binary variables: Is behavior B scheduled in period T?
-   - Continuous variables: Duration of behavior B in period T
-   - Objective: Maximize weighted sum of objective contributions
-   - Constraints: Time budgets, frequency limits, etc.
-
-3. **Optimization**
-   - Uses Linear Programming (PuLP + CBC solver)
-   - Solves in ~1-5 seconds
-   - Returns optimal or feasible solution
-
-4. **Result**
-   - Optimized schedule for each day
-   - Objective contributions breakdown
-   - Can be adjusted by user
-
-### Example
-
-**Input:**
-- Behaviors: Exercise (20-45 min), Study (30-120 min), Meditate (10-20 min)
-- Objectives: Health (0.3), Productivity (0.3), Wellness (0.4)
-- Constraints: Max 480 min/day, Exercise 3x/week minimum
-
-**Output:**
-```json
-{
-  "status": "optimal",
-  "total_objective_value": 87.5,
-  "schedule": [
-    {
-      "behavior": "Exercise",
-      "duration": 45,
-      "day": 1
-    },
-    {
-      "behavior": "Study",
-      "duration": 90,
-      "day": 1
-    },
-    {
-      "behavior": "Meditate",
-      "duration": 15,
-      "day": 1
-    }
-  ]
-}
-```
-
----
-
-## 🧪 Testing
-
-### Backend Tests
+### 2. Manual Backend Setup
 ```bash
 cd backend
-
-# Run all tests
-make test
-
-# Run with coverage
-make test-fast
-
-# Type checking
-mypy app/
+make setup        # Install deps and run migrations
+make run          # Start FastAPI on port 8000
 ```
 
-### Frontend Tests
+### 3. Manual Frontend Setup
 ```bash
 cd frontend
-
-# Run Vitest
-npm run test
-
-# E2E tests
-npm run test:e2e
+npm install
+npm run dev       # Start Vite on port 8080
 ```
 
 ---
 
-## 🐳 Docker Deployment
+## ☁️ Codespaces Guide
 
-### Single Command Deployment
+Running HabitOS in GitHub Codespaces? We've pre-configured everything for you:
 
+1.  **CORS & Proxy**: The frontend uses a Vite proxy (`/api`) to avoid "Failed to fetch" errors.
+2.  **Ports**: 
+    -   Frontend: `8080` (Auto-forwarded)
+    -   Backend: `8000` (Internal proxy target)
+3.  **Environment**: Port forwarding handles the external accessibility.
+
+---
+
+## 🧪 Testing Suite
+
+We maintain high confidence through a multi-layered testing strategy.
+
+### Backend Integration Tests
+Tests real API flows against a live database:
 ```bash
 cd backend
-make docker-build
-make docker-up
+pytest tests_integration/
 ```
 
-This starts:
-- PostgreSQL database
-- Redis cache
-- FastAPI backend
-
-Access at `http://localhost:8000`
-
-### View Logs
+### Optimization Verification
+Ensures the solver returns valid schedules:
 ```bash
-make docker-logs
-```
-
-### Stop Services
-```bash
-make docker-down
+pytest backend/tests/test_optimization_engine.py
 ```
 
 ---
 
-## 📚 Key Features
+## 🔮 Roadmap
 
-### ✅ Completed
-- [x] Core configuration system
-- [x] Complete database schema
-- [x] 6 SQLAlchemy models
-- [x] JWT authentication
-- [x] 3 API route modules
-- [x] Linear optimization solver
-- [x] Pydantic validation
-- [x] Docker setup
-- [x] Database migrations
-- [x] Error handling
-
-### 🔮 Upcoming
-- [ ] Non-linear solver (scipy)
-- [ ] Heuristic solver
-- [ ] Advanced analytics
-- [ ] Recommendation engine
-- [ ] AI/MCP integration
-- [ ] Real-time notifications
-- [ ] Performance optimizations
-- [ ] Comprehensive test suite
-
----
-
-## 📊 Project Statistics
-
-### Code Lines
-- **Backend:** ~3,500 lines of production Python
-- **Frontend:** ~2,000 lines of React/TypeScript
-- **Total:** ~5,500 lines of high-quality code
-
-### Database
-- **7 tables** with full relationships
-- **15+ indexes** for performance
-- **Triggers** for automatic updates
-- **2 analytics views**
-
-### API
-- **11 endpoints** covering full CRUD
-- **Complete OpenAPI spec** (auto-generated)
-- **JWT authentication**
-- **Pagination support**
-- **Error handling**
-
----
-
-## 🔐 Security
-
-- ✅ JWT token-based authentication
-- ✅ Bcrypt password hashing (12 rounds)
-- ✅ CORS configuration
-- ✅ Environment-based secrets
-- ✅ SQL injection prevention
-- ✅ Rate limiting ready
-- ✅ Type-safe code
-
----
-
-## 📖 Documentation
-
-- [Backend README](backend/README.md) - Full backend documentation
-- [Frontend README](frontend/README.md) - Frontend setup and components
-- [API Docs](http://localhost:8000/docs) - Interactive Swagger UI (when running)
+- [x] **Core OR Engine**: Linear programming integration.
+- [x] **Schema Alignment**: Multi-layer pydantic-to-typescript synchronization.
+- [ ] **Advanced Solvers**: Integration with Gurobi and CPLEX for complex constraints.
+- [ ] **AI Recommendation**: LLM-driven suggestions for behavioral weights.
+- [ ] **Mobile Integration**: Progressive Web App (PWA) support.
 
 ---
 
 ## 🤝 Contributing
 
-1. Create feature branch: `git checkout -b feature/name`
-2. Make changes and test
-3. Commit: `git commit -am 'Add feature'`
-4. Push: `git push origin feature/name`
-5. Create Pull Request
-
----
+Contributions are welcome! Please read [CONTRIBUTING.md](file:///workspaces/HabitOS/docs/CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## 📝 License
 
-MIT License - See LICENSE file for details
+This project is licensed under the MIT License - see the [LICENSE](file:///workspaces/HabitOS/LICENSE) file for details.
 
 ---
 
-## 🎓 Educational Value
-
-This project demonstrates:
-
-### **Operations Research**
-- Real linear programming optimization
-- Multi-objective optimization
-- Constraint satisfaction
-- Scalable to non-linear and stochastic problems
-
-### **Software Engineering**
-- Clean architecture (layered)
-- SOLID principles
-- Type safety (Python + TypeScript)
-- Async/await patterns
-- Comprehensive error handling
-
-### **Full-Stack Development**
-- Backend: FastAPI, SQLAlchemy, PostgreSQL
-- Frontend: React, TypeScript, Tailwind
-- DevOps: Docker, Migrations, Makefile
-- Testing: Pytest, Vitest
-
-### **Production Readiness**
-- Environment configuration
-- Database migrations
-- Health checks
-- Logging and monitoring
-- Error tracking
-- Docker deployment
-
----
-
-## 🆘 Troubleshooting
-
-### Backend Connection Issues
-```bash
-cd backend
-# Check PostgreSQL
-docker ps | grep postgres
-
-# Verify DATABASE_URL in .env
-cat .env | grep DATABASE_URL
-```
-
-### Database Reset
-```bash
-cd backend
-make db-reset
-```
-
-### Port Already in Use
-```bash
-# Backend (8000)
-lsof -i :8000
-
-# Frontend (5173)
-lsof -i :5173
-```
-
----
-
-## 📧 Support
-
-For issues and questions:
-1. Check the respective README files
-2. Open an issue on GitHub
-3. Review API documentation at `/docs`
-
----
-
-## 🎉 Ready to Build!
-
-This is a **complete, production-grade platform** ready for:
-- Further feature development
-- Deployment to production
-- Integration with AI tools
-- Real-world user testing
-
-**Happy optimizing! 🚀**
+<div align="center">
+  Built with ❤️ by the HabitOS Team
+</div>
