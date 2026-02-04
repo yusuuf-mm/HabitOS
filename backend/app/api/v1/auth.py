@@ -24,6 +24,7 @@ from app.schemas import (
     TokenRefreshResponse,
     UserResponse,
 )
+from app.schemas.api import ApiResponse
 
 logger = logging.getLogger(__name__)
 

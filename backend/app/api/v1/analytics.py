@@ -120,7 +120,7 @@ async def get_dashboard_summary(
         .where(CompletionLog.user_id == current_user.id)
     )
     avg_score = avg_score_result.scalar() or 0.0
-    avg_score_normalized = (avg_score / 5.0) if avg_score > 0 else 0.0  # Normalize to 0-1
+    avg_score_normalized = (float(avg_score) / 5.0) if avg_score > 0 else 0.0  # Normalize to 0-1
     
     # Streak days
     streak_days = await calculate_streak(db, current_user.id)
