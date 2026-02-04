@@ -13,6 +13,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { HabitOSLogo } from "@/components/HabitOSLogo";
 
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -50,7 +51,7 @@ export function AppLayout() {
           {/* Logo */}
           <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
-              <Sparkles className="h-4 w-4 text-sidebar-primary-foreground" />
+              <HabitOSLogo className="h-5 w-5 text-sidebar-primary-foreground" />
             </div>
             <span className="text-lg font-semibold text-sidebar-foreground">
               HabitOS
@@ -110,7 +111,7 @@ export function AppLayout() {
       <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent">
-            <Sparkles className="h-3.5 w-3.5 text-accent-foreground" />
+            <HabitOSLogo className="h-4 w-4 text-accent-foreground" />
           </div>
           <span className="font-semibold text-foreground">HabitOS</span>
         </div>
