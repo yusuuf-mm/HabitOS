@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: habitos-db-prod
+    environment:
+      POSTGRES_USER: ${DB_USER:-habituser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme123}
+      POSTGRES_DB: ${DB_NAME:-habitdb}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-habituser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - habitos-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: habitos-redis-prod
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - habitos-network
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: habitos-app-prod
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-habituser}:${DB_PASSWORD:-changeme123}@postgres:5432/${DB_NAME:-habitdb}
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      
+      # Application
+      ENVIRONMENT: production
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY:-please-change-this-secret-key-in-production}
+      
+      # CORS - Update with your actual production domain
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,https://yourdomain.com}
+      
+      # Optional: JWT settings
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-${SECRET_KEY:-please-change-this-jwt-secret}}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+    ports:
+      - "${APP_PORT:-80}:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - habitos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  habitos-network:
+    driver: bridge
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:
