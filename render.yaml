@@ -17,11 +17,14 @@ services:
           name: habitos-db
           property: connectionString
       - key: REDIS_URL
-        sync: false # User must provide this value manually (e.g., from Upstash)
+        fromService:
+          type: redis
+          name: habitos-redis
+          property: connectionString
       - key: SECRET_KEY
-        sync: false # User must provide a random string
+        generate: true
       - key: JWT_SECRET_KEY
-        sync: false # User must provide a random string
+        generate: true
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS
@@ -36,5 +39,15 @@ databases:
   - name: habitos-db
     databaseName: habitos
     user: habitos
-    plan: free # NOTE: Free DBs expire after 90 days. Back up your data!
+    plan: free # NOTE: Free DBs expire after 90 days
+    region: oregon
+
+  # --------------------------------------------------------------------------------
+  # Redis
+  # --------------------------------------------------------------------------------
+  # Note: Render Redis does not have a free tier. 
+  # If you need a free alternative, consider using a managed Redis provider like Upstash
+  # and adding the REDIS_URL as a simple environment variable instead of this service.
+  - name: habitos-redis
+    plan: starter # ~$10/month
     region: oregon
