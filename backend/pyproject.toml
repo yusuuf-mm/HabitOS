@@ -35,6 +35,7 @@ dependencies = [
     "ipdb==0.13.13",
     "pyjwt>=2.11.0",
     "aiosqlite>=0.22.1",
+    "psycopg2-binary>=2.9.11",
 ]
 
 [dependency-groups]

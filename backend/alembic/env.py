@@ -1,6 +1,11 @@
 """Alembic migration environment configuration."""
 from logging.config import fileConfig
 import asyncio
+import sys
+from os.path import abspath, dirname
+
+# Add project root to sys.path
+sys.path.insert(0, dirname(dirname(abspath(__file__))))
 
 from sqlalchemy import engine_from_config
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
