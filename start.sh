@@ -13,5 +13,14 @@ sed -i "s/listen[[:space:]]\+80;/listen $PORT;/g" /etc/nginx/sites-enabled/defau
 echo "Nginx configuration after port update:"
 grep "listen" /etc/nginx/sites-enabled/default
 
+# Run database migrations
+echo "Running database migrations..."
+if alembic upgrade head; then
+    echo "Database migrations applied successfully."
+else
+    echo "Error applying database migrations."
+    exit 1
+fi
+
 # Start supervisord
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
