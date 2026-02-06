@@ -19,9 +19,9 @@ services:
       - key: REDIS_URL
         sync: false # User must provide this value manually (e.g., from Upstash)
       - key: SECRET_KEY
-        generate: true
+        sync: false # User must provide a random string
       - key: JWT_SECRET_KEY
-        generate: true
+        sync: false # User must provide a random string
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS

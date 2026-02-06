@@ -9,6 +9,14 @@ This guide explains how to deploy HabitOS using the unified production container
 - At least 2GB free RAM
 - At least 10GB free disk space
 
+## ☁️ Deploy to Render
+
+6.  **Important**: It will ask for environment variables:
+    *   `REDIS_URL`: Paste the URL you got from Upstash.
+    *   `SECRET_KEY`: Generate a random string (e.g., `openssl rand -hex 32` in terminal).
+    *   `JWT_SECRET_KEY`: Generate another random string.
+7.  Click **Apply**.
+
 ## 🔧 Setup Instructions
 
 ### 1. Configure Environment Variables
