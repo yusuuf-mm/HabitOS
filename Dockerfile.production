@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     nginx \
     supervisor \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy backend requirements and install Python dependencies
@@ -38,6 +39,7 @@ COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/main.py ./main.py
+COPY backend/scripts ./scripts
 
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/frontend/dist /var/www/html

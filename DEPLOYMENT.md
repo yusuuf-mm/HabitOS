@@ -68,12 +68,17 @@ Initialize the database schema:
 docker-compose -f docker-compose.production.yml exec app alembic upgrade head
 ```
 
+> [!IMPORTANT]
+> If you have just pulled new code (including new migration files), you MUST rebuild the container first:
+> `docker-compose -f docker-compose.production.yml build app`
+
+
 ### 5. (Optional) Seed the Database
 
 If you want to populate with sample data:
 
 ```bash
-docker-compose -f docker-compose.production.yml exec app python scripts/seed_db.py
+docker-compose -f docker-compose.production.yml exec app python scripts/seed_data.py
 ```
 
 ### 6. Verify Deployment
