@@ -29,8 +29,6 @@ services:
         value: production
       - key: CORS_ORIGINS
         value: https://habitos.onrender.com # Update this after deployment or add custom domain
-      - key: APP_PORT
-        value: 80
 
 databases:
   # --------------------------------------------------------------------------------
