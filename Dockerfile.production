@@ -61,7 +61,15 @@ RUN mkdir -p /var/log/supervisor /var/log/nginx /var/run && \
     chmod -R 755 /var/www/html
 
 # Expose port 80 for web traffic
-EXPOSE 80
+# Expose default Render port (optional, for documentation)
+EXPOSE 10000
+
 
 # Use supervisor to manage both nginx and uvicorn
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
+# Copy startup script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Use startup script to configure nginx port dynamically and start supervisor
+CMD ["/start.sh"]
