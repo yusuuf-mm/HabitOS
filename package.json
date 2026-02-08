@@ -8,7 +8,11 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix frontend\" \"cd backend && make run\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test:frontend && npm run test:backend:unit && npm run test:backend:integration",
+    "test:frontend": "npm test --prefix frontend",
+    "test:backend:unit": "cd backend && make test-fast",
+    "test:backend:integration": "cd backend && python -m pytest tests_integration/ -v",
+    "test:all": "npm run test"
   },
   "repository": {
     "type": "git",
