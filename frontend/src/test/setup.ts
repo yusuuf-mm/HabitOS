@@ -15,7 +15,18 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 // Mock import.meta.env
-(global as any).import = {
+interface ImportMetaEnv {
+  meta: {
+    env: {
+      VITE_API_URL: string;
+      DEV: boolean;
+      MODE: string;
+      BASE_URL: string;
+    };
+  };
+}
+
+(global as { import?: ImportMetaEnv }).import = {
   meta: {
     env: {
       VITE_API_URL: "http://localhost:8000/api/v1",

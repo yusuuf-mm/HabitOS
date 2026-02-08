@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import Dashboard from "../pages/Dashboard";
 import { BrowserRouter } from "react-router-dom";
@@ -37,7 +37,7 @@ describe("Dashboard Page", () => {
 
     it("shows loading state initially", () => {
         // Mock a pending promise
-        (apiClient.analytics.getDashboardSummary as any).mockReturnValue(new Promise(() => { }));
+        (apiClient.analytics.getDashboardSummary as Mock).mockReturnValue(new Promise(() => { }));
 
         render(
             <BrowserRouter>
@@ -49,7 +49,7 @@ describe("Dashboard Page", () => {
     });
 
     it("renders stats after data loads", async () => {
-        (apiClient.analytics.getDashboardSummary as any).mockResolvedValue(mockSummaryData);
+        (apiClient.analytics.getDashboardSummary as Mock).mockResolvedValue(mockSummaryData);
 
         render(
             <BrowserRouter>
@@ -66,7 +66,7 @@ describe("Dashboard Page", () => {
     });
 
     it("handles error state", async () => {
-        (apiClient.analytics.getDashboardSummary as any).mockRejectedValue(new Error("Failed"));
+        (apiClient.analytics.getDashboardSummary as Mock).mockRejectedValue(new Error("Failed"));
 
         render(
             <BrowserRouter>

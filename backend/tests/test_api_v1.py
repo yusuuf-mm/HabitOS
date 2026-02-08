@@ -19,12 +19,14 @@ mock_user.status = "completed"
 # Mock DB Session
 async def override_get_db():
     mock_db = AsyncMock()
-    # Mock execute result
+    # Mock execute result with proper scalar returns
     mock_result = MagicMock()
     mock_result.scalars.return_value.first.return_value = mock_user
     mock_result.scalars.return_value.all.return_value = []
     # Ensure .all() returns list
     mock_result.all.return_value = [] 
+    # Ensure .scalar() returns int (for COUNT queries in analytics)
+    mock_result.scalar.return_value = 0
     
     mock_db.execute.return_value = mock_result
     yield mock_db

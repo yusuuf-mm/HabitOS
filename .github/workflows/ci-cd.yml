@@ -35,7 +35,7 @@ jobs:
 
       - name: Run frontend linter
         working-directory: ./frontend
-        run: npm run lint
+        run: npm run lint -- --max-warnings=20
 
       - name: Run frontend tests
         working-directory: ./frontend

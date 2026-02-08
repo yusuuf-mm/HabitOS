@@ -4,6 +4,13 @@ import { useAuthStore } from "@/store/authStore";
 import { apiClient } from "@/services/apiClient";
 import type { UserCredentials, RegisterPayload } from "@/types";
 
+interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresAt: number;
+}
+
 export function useAuth() {
   const navigate = useNavigate();
   const {
@@ -40,7 +47,7 @@ export function useAuth() {
         // Save token to localStorage
         localStorage.setItem("authToken", response.accessToken);
         // Update auth store
-        const authTokens: any = {
+        const authTokens: AuthTokens = {
           accessToken: response.accessToken,
           refreshToken: response.refreshToken,
           tokenType: response.tokenType,
@@ -66,7 +73,7 @@ export function useAuth() {
         // Save token to localStorage
         localStorage.setItem("authToken", response.accessToken);
         // Update auth store
-        const authTokens: any = {
+        const authTokens: AuthTokens = {
           accessToken: response.accessToken,
           refreshToken: response.refreshToken,
           tokenType: response.tokenType,
