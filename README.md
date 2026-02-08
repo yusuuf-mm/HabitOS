@@ -29,6 +29,7 @@
 - [Technology Stack](#-technology-stack)
 - [Getting Started](#-getting-started)
 - [Testing](#-testing)
+- [CI/CD Pipeline](#-cicd-pipeline)
 - [Deployment](#-deployment)
 - [API Documentation](#-api-documentation)
 - [Mathematical Foundation](#-mathematical-foundation)
@@ -120,7 +121,7 @@ The development followed an AI-augmented workflow:
 - 🐛 **Accelerated debugging** with AI-powered log analysis and root cause identification
 - 📚 **Generated comprehensive documentation** including this README and deployment guides
 
-> **Note**: MCP (Model Context Protocol) integration and advanced CI/CD pipelines are planned for future iterations to further enhance AI-assisted workflows.
+> **Note**: MCP (Model Context Protocol) integration is planned for future iterations. Advanced CI/CD pipelines have been fully implemented using GitHub Actions to further enhance AI-assisted workflows.
 
 ---
 
@@ -296,7 +297,7 @@ graph TB
 | **Supervisord** | Process manager | Manages Nginx + Uvicorn |
 | **Render** | Cloud platform | PostgreSQL + Web Service |
 | **Upstash** | Redis hosting | Serverless Redis |
-| **GitHub Actions** | CI/CD (planned) | Testing + deployment |
+| **GitHub Actions** | CI/CD | Automated testing + deployment |
 
 ### Development Tools
 
@@ -561,11 +562,26 @@ pytest tests_integration/test_auth.py -v
 - Database cleanup between tests
 - Factory functions for test data
 
-**CI Status**: Manual testing currently; GitHub Actions pipeline planned
+**CI Status**: Fully automated via GitHub Actions (Frontend + Backend Unit/Integration Tests)
 
 ---
 
-## 🚀 Deployment
+## � CI/CD Pipeline
+
+The project uses a comprehensive GitHub Actions pipeline for continuous integration and deployment.
+
+### Pipeline Stages
+1. **Frontend Verification**: Linting, Type Checking, Unit Tests, Build Verification
+2. **Backend Verification**: Code Quality (Ruff), Unit Tests (Pytest)
+3. **Integration Testing**: Full API tests running against isolated PostgreSQL & Redis containers
+4. **Deployment**: Automatic deployment to Render on successful `main` branch builds
+5. **Health Checks**: Automated verification of deployment success
+
+For detailed setup instructions, see the [CI/CD Setup Guide](.github/CI_CD_SETUP.md).
+
+---
+
+## �🚀 Deployment
 
 ### Live Deployment
 
