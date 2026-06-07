@@ -6,6 +6,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends
 
+from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.api.deps import get_db, get_current_active_user
 from app.models import (
     User, 
@@ -162,13 +163,6 @@ async def get_dashboard_summary(
     )
     today_schedule_raw = today_schedule_result.all()
 
-    # Time mapping logic
-    def period_to_time(p):
-        total_mins = p * 15 # Assuming 15-min periods as per schedule.py
-        h = (total_mins // 60) % 24
-        m = total_mins % 60
-        return f"{h:02d}:{m:02d}"
-
     # Check for completions
     completion_result = await db.execute(
         select(CompletionLog.behavior_id)
@@ -218,7 +212,7 @@ async def get_dashboard_summary(
                     id=sb.id,
                     behavior_name=b.name,
                     time_slot="flexible", # Default for dashboard
-                    start_time=period_to_time(sb.time_period % 96), # Map to day's period
+                    start_time=period_to_time(sb.time_period % PERIODS_PER_DAY),
                     is_completed=sb.behavior_id in completed_behavior_ids
                 )
                 for sb, b in today_schedule_raw

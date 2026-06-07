@@ -10,6 +10,7 @@ from sqlalchemy import select, func
 
 from app.api.deps import get_db, get_current_active_user
 from app.core import settings
+from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.models import (
     User,
     Behavior,
@@ -52,14 +53,6 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
     scheduled_items = scheduled_result.all()
     
     objective_map = await get_objective_map(db, user.id)
-    
-    # helper for time calculation (15min periods)
-    def period_to_time(p):
-        total_mins = p * 15
-        day_mins = total_mins % 1440
-        h = day_mins // 60
-        m = day_mins % 60
-        return f"{h:02d}:{m:02d}"
 
     scheduled_behaviors = []
     total_duration = 0
@@ -85,18 +78,23 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
         total_duration += duration
         total_energy += b.energy_cost
 
-    # Reconstruct contributions from results JSON
+    # Reconstruct contributions from results JSON.
+    # The solver stores ``contribution`` and ``weight`` but not ``percentage``,
+    # so we compute it here as each objective's share of total objective value.
     contributions = []
+    total_value = run.total_objective_value or 0.0
     if run.results and "objective_contributions" in run.results:
         for obj_type, data in run.results["objective_contributions"].items():
             obj_id = objective_map.get(obj_type)
             if obj_id:
+                contrib = data.get("contribution", 0.0)
+                pct = (contrib / total_value * 100) if total_value > 0 else 0.0
                 contributions.append(
                     ObjectiveContributionSchema(
                         objectiveId=obj_id,
                         objectiveName=obj_type.capitalize(),
-                        contribution=data.get("contribution", 0.0),
-                        percentage=data.get("percentage", 0.0)
+                        contribution=contrib,
+                        percentage=round(pct, 2),
                     )
                 )
 
@@ -201,8 +199,7 @@ async def solve_optimization(
 
         # Determine time periods and dates
         start_date = request.targetDate or date_class.today()
-        # For simplicity, optimize for 1 day if not specified. Original was session setting.
-        time_periods = 1
+        time_periods = PERIODS_PER_DAY  # 96 x 15-minute blocks = 1 full day
         end_date = start_date
 
         # Create optimization problem

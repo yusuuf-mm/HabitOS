@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
+from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.api.deps import get_db, get_current_active_user
 from app.models import User, ScheduledBehavior, OptimizationRun, Behavior, CompletionLog
 from app.schemas.api import ApiResponse
@@ -67,18 +68,6 @@ async def get_daily_schedule(
     
     objective_map = await get_objective_map(db, current_user.id)
 
-    # Mock mapping of time_period integer to "HH:mm".
-    def period_to_time(p):
-        total_mins = p * 15
-        day_mins = total_mins % 1440
-        h = day_mins // 60
-        m = day_mins % 60
-        return f"{h:02d}:{m:02d}"
-
-    periods_per_day = 96
-    start_p = day_offset * periods_per_day
-    end_p = (day_offset + 1) * periods_per_day
-    
     response_items = []
     total_duration = 0
     total_energy = 0
@@ -92,10 +81,13 @@ async def get_daily_schedule(
     )
     completed_behaviors = { (str(c.optimization_run_id), str(c.behavior_id)) for c in completion_result.all() }
 
+    # Items are stored with absolute period indices (0 to PERIODS_PER_DAY - 1).
+    day_periods = (target_date - run.start_date).days * PERIODS_PER_DAY
+
     for sb, behavior in items:
-        if sb.time_period >= start_p and sb.time_period < end_p:
-            start_time = period_to_time(sb.time_period)
-            end_time = period_to_time(sb.time_period + (sb.scheduled_duration // 15))
+        if day_periods <= sb.time_period < day_periods + PERIODS_PER_DAY:
+            start_time = period_to_time(sb.time_period % PERIODS_PER_DAY)
+            end_time = period_to_time((sb.time_period % PERIODS_PER_DAY) + (sb.scheduled_duration // 15))
             
             is_completed = (str(run.id), str(behavior.id)) in completed_behaviors
             
@@ -115,18 +107,22 @@ async def get_daily_schedule(
             total_duration += sb.scheduled_duration
             total_energy += behavior.energy_cost
 
-    # Reconstruct contributions for objective_scores
+    # Reconstruct contributions for objective_scores.
+    # Percentage is computed from contribution / total objective value.
     contributions = []
+    total_value = run.total_objective_value or 0.0
     if run.results and "objective_contributions" in run.results:
         for obj_type, data in run.results["objective_contributions"].items():
             obj_id = objective_map.get(obj_type)
             if obj_id:
+                contrib = data.get("contribution", 0.0)
+                pct = (contrib / total_value * 100) if total_value > 0 else 0.0
                 contributions.append(
                     ObjectiveContributionSchema(
                         objectiveId=obj_id,
                         objectiveName=obj_type.capitalize(),
-                        contribution=data.get("contribution", 0.0),
-                        percentage=data.get("percentage", 0.0)
+                        contribution=contrib,
+                        percentage=round(pct, 2),
                     )
                 )
 
