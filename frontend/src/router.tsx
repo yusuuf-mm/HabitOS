@@ -1,5 +1,6 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
+import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
@@ -13,6 +14,7 @@ export function AppRouter() {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
@@ -25,8 +27,7 @@ export function AppRouter() {
         <Route path="/history" element={<History />} />
       </Route>
 
-      {/* Redirects */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      {/* Fallback */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

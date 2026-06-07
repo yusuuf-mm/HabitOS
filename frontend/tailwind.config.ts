@@ -90,7 +90,11 @@ export default {
           to: { opacity: "1" },
         },
         "fade-up": {
-          from: { opacity: "0", transform: "translateY(10px)" },
+          from: { opacity: "0", transform: "translateY(12px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "fade-up-slow": {
+          from: { opacity: "0", transform: "translateY(24px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
         "slide-in-right": {
@@ -105,26 +109,40 @@ export default {
           from: { transform: "rotate(0deg)" },
           to: { transform: "rotate(360deg)" },
         },
+        "glow-pulse": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "0.8" },
+        },
+        "float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
+        "grid-scroll": {
+          from: { transform: "translateY(0)" },
+          to: { transform: "translateY(-96px)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.3s ease-out",
-        "fade-up": "fade-up 0.4s ease-out",
+        "fade-up": "fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
+        "fade-up-slow": "fade-up-slow 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-in-right": "slide-in-right 0.3s ease-out",
         "pulse-subtle": "pulse-subtle 2s ease-in-out infinite",
         "spin-slow": "spin-slow 1.5s linear infinite",
+        "glow-pulse": "glow-pulse 3s ease-in-out infinite",
+        "float": "float 6s ease-in-out infinite",
+        "grid-scroll": "grid-scroll 20s linear infinite",
       },
       fontFamily: {
-        sans: [
-          "-apple-system",
-          "BlinkMacSystemFont",
-          "Segoe UI",
-          "Roboto",
-          "Helvetica Neue",
-          "Arial",
-          "sans-serif",
-        ],
+        sans: ['"Plus Jakarta Sans"', "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        serif: ['"Instrument Serif"', "Georgia", "serif"],
+        mono: ['"JetBrains Mono"', "SF Mono", "monospace"],
+      },
+      fontSize: {
+        "display": ["4.5rem", { lineHeight: "1.05", letterSpacing: "-0.03em", fontWeight: "400" }],
+        "display-sm": ["3rem", { lineHeight: "1.1", letterSpacing: "-0.02em", fontWeight: "400" }],
       },
     },
   },

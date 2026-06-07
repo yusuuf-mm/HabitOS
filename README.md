@@ -2,9 +2,48 @@
 
 <div align="center">
 
-<!-- TODO: Add screenshot of the application dashboard here -->
-<!-- Suggested location: docs/images/dashboard-screenshot.png -->
-![HabitOS Dashboard](./docs/images/dashboard-screenshot.png)
+<!-- Dashboard Preview -->
+<svg width="800" height="400" viewBox="0 0 800 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="400" rx="12" fill="#0A0A0A"/>
+  <rect x="20" y="20" width="760" height="50" rx="8" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <circle cx="48" cy="45" r="8" fill="#333333"/>
+  <text x="68" y="49" font-family="monospace" font-size="13" fill="#666666">HabitOS</text>
+  <rect x="200" y="32" width="120" height="26" rx="6" fill="#1A1A1A"/>
+  <text x="215" y="49" font-family="monospace" font-size="10" fill="#444444">dashboard</text>
+  <rect x="20" y="90" width="180" height="120" rx="8" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <text x="36" y="120" font-family="monospace" font-size="10" fill="#555555">TOTAL BEHAVIORS</text>
+  <text x="36" y="155" font-family="monospace" font-size="28" fill="#AAC8AA">12</text>
+  <rect x="220" y="90" width="180" height="120" rx="8" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <text x="236" y="120" font-family="monospace" font-size="10" fill="#555555">COMPLETION RATE</text>
+  <text x="236" y="155" font-family="monospace" font-size="28" fill="#AAC8AA">87%</text>
+  <rect x="420" y="90" width="180" height="120" rx="8" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <text x="436" y="120" font-family="monospace" font-size="10" fill="#555555">STREAK</text>
+  <text x="436" y="155" font-family="monospace" font-size="28" fill="#AA825A">14 days</text>
+  <rect x="620" y="90" width="160" height="120" rx="8" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <text x="636" y="120" font-family="monospace" font-size="10" fill="#555555">OPTIMIZATION</text>
+  <text x="636" y="155" font-family="monospace" font-size="28" fill="#AAC8AA">23</text>
+  <rect x="20" y="230" width="480" height="150" rx="8" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <text x="36" y="260" font-family="monospace" font-size="10" fill="#555555">TODAY'S SCHEDULE</text>
+  <rect x="36" y="275" width="100" height="32" rx="6" fill="#1A2A1A" stroke="#2A3A2A" stroke-width="1"/>
+  <text x="46" y="295" font-family="monospace" font-size="9" fill="#6A8A6A">06:00 Run</text>
+  <rect x="146" y="275" width="140" height="32" rx="6" fill="#1A1A2A" stroke="#2A2A3A" stroke-width="1"/>
+  <text x="156" y="295" font-family="monospace" font-size="9" fill="#6A6A8A">08:00 Deep Work</text>
+  <rect x="296" y="275" width="120" height="32" rx="6" fill="#2A2A1A" stroke="#3A3A2A" stroke-width="1"/>
+  <text x="306" y="295" font-family="monospace" font-size="9" fill="#8A8A6A">12:00 Read</text>
+  <rect x="36" y="320" width="80" height="32" rx="6" fill="#1A1A1A" stroke="#2A2A2A" stroke-width="1"/>
+  <text x="46" y="340" font-family="monospace" font-size="9" fill="#555555">14:00 Gym</text>
+  <rect x="520" y="230" width="260" height="150" rx="8" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <text x="536" y="260" font-family="monospace" font-size="10" fill="#555555">OBJECTIVE PROGRESS</text>
+  <text x="536" y="290" font-family="monospace" font-size="10" fill="#666666">Health</text>
+  <rect x="620" y="280" width="140" height="8" rx="4" fill="#1A1A1A"/>
+  <rect x="620" y="280" width="105" height="8" rx="4" fill="#AAC8AA"/>
+  <text x="536" y="320" font-family="monospace" font-size="10" fill="#666666">Productivity</text>
+  <rect x="620" y="310" width="140" height="8" rx="4" fill="#1A1A1A"/>
+  <rect x="620" y="310" width="120" height="8" rx="4" fill="#AA825A"/>
+  <text x="536" y="350" font-family="monospace" font-size="10" fill="#666666">Learning</text>
+  <rect x="620" y="340" width="140" height="8" rx="4" fill="#1A1A1A"/>
+  <rect x="620" y="340" width="70" height="8" rx="4" fill="#6A8A8A"/>
+</svg>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
