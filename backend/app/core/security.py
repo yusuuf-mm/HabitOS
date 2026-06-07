@@ -8,6 +8,10 @@ from jwt import encode, decode, InvalidTokenError
 from .config import settings
 
 
+class TokenTypeError(InvalidTokenError):
+    """Raised when a token's type claim does not match the expected type."""
+
+
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create JWT access token."""
     to_encode = data.copy()
@@ -19,7 +23,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
 
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "type": "access"})
 
     encoded_jwt = encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
@@ -41,15 +45,31 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     return encoded_jwt
 
 
-def verify_token(token: str) -> Dict[str, Any]:
-    """Verify JWT token and return payload."""
+def verify_token(token: str, expected_type: Optional[str] = None) -> Dict[str, Any]:
+    """Verify JWT token and return payload.
+
+    Args:
+        token: Encoded JWT.
+        expected_type: If provided, the token's ``type`` claim MUST match this
+            value or a :class:`TokenTypeError` is raised. Pass ``"refresh"`` on
+            the refresh endpoint so a stolen access token can't be used to mint
+            new access tokens.
+    """
     try:
         payload = decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
-        return payload
     except InvalidTokenError:
         raise InvalidTokenError("Invalid token")
+
+    if expected_type is not None:
+        token_type = payload.get("type")
+        if token_type != expected_type:
+            raise TokenTypeError(
+                f"Invalid token type: expected '{expected_type}', got '{token_type}'"
+            )
+
+    return payload
 
 
 def get_token_payload(token: str) -> Optional[Dict[str, Any]]:

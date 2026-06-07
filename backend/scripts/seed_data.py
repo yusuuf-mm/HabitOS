@@ -20,6 +20,7 @@ from app.models import (
     TimeSlot,
     Objective,
     ObjectiveType,
+    ObjectiveImpact,
     OptimizationRun,
     OptimizationStatus,
     SolverType,
@@ -44,6 +45,7 @@ async def seed_data():
             "scheduled_behaviors",
             "optimization_runs",
             "constraints",
+            "objective_impacts",
             "behaviors",
             "objectives",
             "users"
@@ -115,7 +117,7 @@ async def seed_data():
 
         behaviors = []
         for name, desc, cat, min_d, typ_d, max_d, energy, slots, impacts in behavior_configs:
-            behaviors.append(Behavior(
+            behavior = Behavior(
                 id=uuid4(),
                 user_id=test_user.id,
                 name=name,
@@ -127,15 +129,17 @@ async def seed_data():
                 energy_cost=energy,
                 is_active=True,
                 preferred_time_slots=slots,
-                impact_on_health=impacts.get("health", 0.0),
-                impact_on_productivity=impacts.get("productivity", 0.0),
-                impact_on_learning=impacts.get("learning", 0.0),
-                impact_on_wellness=impacts.get("wellness", 0.0),
-                impact_on_social=impacts.get("social", 0.0),
-                impact_on_financial=impacts.get("financial", 0.0),
-                impact_on_creativity=impacts.get("creativity", 0.0),
-                impact_on_mindfulness=impacts.get("mindfulness", 0.0),
-            ))
+            )
+            # Normalized impact rows: one per non-zero objective impact.
+            behavior.objective_impacts = [
+                ObjectiveImpact(
+                    objective_type=ObjectiveType(obj_type),
+                    impact_score=score,
+                )
+                for obj_type, score in impacts.items()
+                if score
+            ]
+            behaviors.append(behavior)
         session.add_all(behaviors)
         await session.flush()
 

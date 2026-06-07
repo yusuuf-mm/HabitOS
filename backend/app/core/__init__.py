@@ -23,6 +23,7 @@ from .security import (
     get_token_payload,
     hash_password,
     verify_password,
+    TokenTypeError,
 )
 
 __all__ = [
@@ -47,4 +48,5 @@ __all__ = [
     "get_token_payload",
     "hash_password",
     "verify_password",
+    "TokenTypeError",
 ]

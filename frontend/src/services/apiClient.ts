@@ -92,7 +92,7 @@ const createResponse = <T>(data: T, success = true, message?: string): ApiRespon
 });
 
 const generateId = (prefix: string) =>
-  `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).substr(2, 9)}`;
+  `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 11)}`;
 
 // =============================================================================
 // AUTH API

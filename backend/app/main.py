@@ -28,6 +28,15 @@ async def lifespan(app: FastAPI):
     """Manage application lifespan."""
     # Startup
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+
+    # Hard-fail in production if SECRET_KEY is missing or matches a known
+    # placeholder. This catches misconfigured deploys before the first request.
+    try:
+        settings.assert_safe_for_environment()
+    except RuntimeError as exc:
+        logger.critical(str(exc))
+        raise
+
     # await init_db()  # Disabled: Use Alembic migrations for database schema management
     # logger.info("Database initialized")
     yield

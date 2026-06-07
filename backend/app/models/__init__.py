@@ -2,6 +2,7 @@
 from .user import User
 from .behavior import Behavior, BehaviorCategory, TimeSlot
 from .objective import Objective, ObjectiveType
+from .objective_impact import ObjectiveImpact
 from .constraint import Constraint, ConstraintType
 from .optimization import OptimizationRun, OptimizationStatus, SolverType, ScheduledBehavior
 from .tracking import CompletionLog
@@ -13,6 +14,7 @@ __all__ = [
     "TimeSlot",
     "Objective",
     "ObjectiveType",
+    "ObjectiveImpact",
     "Constraint",
     "ConstraintType",
     "OptimizationRun",

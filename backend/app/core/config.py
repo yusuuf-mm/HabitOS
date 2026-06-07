@@ -7,6 +7,18 @@ from pydantic import Field, PostgresDsn, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# Hard-coded placeholder SECRET_KEY values that MUST NOT be used in production.
+# These are the documented "change me" defaults shipped with the project and the
+# docker-compose fallback. They are intentionally short and well-known.
+INSECURE_SECRET_KEYS = frozenset({
+    "your-secret-key-change-this-in-production",
+    "dev-secret-key-change-in-production",
+    "change-me",
+    "secret",
+    "",
+})
+
+
 class Settings(BaseSettings):
     """Application settings with environment-based configuration."""
 
@@ -98,6 +110,35 @@ class Settings(BaseSettings):
             if v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+
+    def assert_safe_for_environment(self) -> None:
+        """Refuse to boot in production with an insecure SECRET_KEY.
+
+        Raises RuntimeError if ENVIRONMENT is "production" (or "prod") and
+        SECRET_KEY is missing, too short, or matches a known placeholder.
+        """
+        env = (self.ENVIRONMENT or "").strip().lower()
+        if env not in {"production", "prod"}:
+            return
+
+        key = (self.SECRET_KEY or "").strip()
+        problems: List[str] = []
+        if not key:
+            problems.append("SECRET_KEY is empty")
+        elif key.lower() in {k.lower() for k in INSECURE_SECRET_KEYS}:
+            problems.append("SECRET_KEY matches a known insecure default")
+        elif len(key) < 32:
+            problems.append(
+                f"SECRET_KEY is too short ({len(key)} chars); "
+                "use at least 32 characters of random data in production"
+            )
+
+        if problems:
+            raise RuntimeError(
+                "Refusing to start in production with an insecure SECRET_KEY: "
+                + "; ".join(problems)
+                + ". Set a strong, unique SECRET_KEY environment variable."
+            )
 
     @field_validator("CORS_ORIGINS", "CORS_ALLOW_METHODS", "CORS_ALLOW_HEADERS", mode="before")
     @classmethod

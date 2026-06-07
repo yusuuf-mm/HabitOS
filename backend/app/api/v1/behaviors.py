@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sa_delete
 
 from app.api.deps import get_db, get_current_active_user
-from app.models import User, Behavior, CompletionLog, Objective
+from app.models import User, Behavior, CompletionLog, Objective, ObjectiveType
+from app.models.objective_impact import ObjectiveImpact
 from app.schemas.api import ApiResponse
 from app.schemas.behavior import (
     BehaviorCreate,
@@ -34,20 +35,91 @@ async def get_objective_map(db: AsyncSession, user_id: UUID) -> Dict[str, UUID]:
     return {obj.type.value if hasattr(obj.type, "value") else str(obj.type): obj.id for obj in objectives}
 
 
+async def _resolve_objective_type(
+    db: AsyncSession, user_id: UUID, objective_id: UUID
+) -> ObjectiveType | None:
+    """Look up the ObjectiveType enum value for one of the user's objectives."""
+    result = await db.execute(
+        select(Objective).where(
+            (Objective.id == objective_id) & (Objective.user_id == user_id)
+        )
+    )
+    obj = result.scalars().first()
+    if obj is None:
+        return None
+    if isinstance(obj.type, ObjectiveType):
+        return obj.type
+    return ObjectiveType(obj.type)
+
+
+async def _sync_objective_impacts(
+    db: AsyncSession,
+    behavior: Behavior,
+    impacts: List[ObjectiveImpactCreate],
+    user_id: UUID,
+) -> None:
+    """Replace a behavior's impact rows with the supplied list.
+
+    Each ``ObjectiveImpactCreate`` references an objective owned by the same
+    user. Unknown objective IDs are silently dropped so a single bad entry
+    can't blow up the whole request.
+
+    Uses explicit delete + insert on ``ObjectiveImpact`` rather than
+    relationship assignment to avoid the ``greenlet_spawn`` error that occurs
+    when SQLAlchemy tries to load the old collection synchronously inside an
+    async session.
+    """
+    seen: Dict[ObjectiveType, float] = {}
+    for entry in impacts:
+        obj_type = await _resolve_objective_type(db, user_id, entry.objectiveId)
+        if obj_type is None:
+            continue
+        seen[obj_type] = entry.impactScore
+
+    # Delete existing rows for this behavior.
+    await db.execute(
+        sa_delete(ObjectiveImpact).where(ObjectiveImpact.behavior_id == behavior.id)
+    )
+
+    # Insert fresh rows.
+    for obj_type, score in seen.items():
+        db.add(
+            ObjectiveImpact(
+                behavior_id=behavior.id,
+                objective_type=obj_type,
+                impact_score=score,
+            )
+        )
+
+
 def map_behavior_to_response(behavior: Behavior, stats: tuple = None, objective_map: Dict[str, UUID] = None) -> BehaviorResponse:
-    """Map behavior model to BehaviorResponse schema."""
+    """Map behavior model to BehaviorResponse schema.
+
+    Reads impacts from the relationship. If ``objective_map`` is provided, the
+    response ``objectiveId`` is the user's specific Objective row id; otherwise
+    we fall back to a stable hash of the enum value so the response is still
+    well-formed.
+    """
     impacts = []
-    if objective_map:
-        for obj_type, obj_id in objective_map.items():
-            impact_score = behavior.get_impact(obj_type)
-            if impact_score != 0:
-                impacts.append(
-                    ObjectiveImpactResponse(
-                        objectiveId=obj_id,
-                        objectiveName=obj_type.capitalize(),
-                        impactScore=impact_score
-                    )
-                )
+    for impact in behavior.objective_impacts:
+        obj_type_value = (
+            impact.objective_type.value
+            if hasattr(impact.objective_type, "value")
+            else str(impact.objective_type)
+        )
+        obj_id = objective_map.get(obj_type_value) if objective_map else None
+        if obj_id is None:
+            # Skip impacts for objectives the user hasn't created a row for.
+            # This keeps the response aligned with the user's own objective list.
+            if objective_map is not None:
+                continue
+        impacts.append(
+            ObjectiveImpactResponse(
+                objectiveId=obj_id,
+                objectiveName=obj_type_value,
+                impactScore=impact.impact_score,
+            )
+        )
 
     statistics = None
     if stats:
@@ -149,29 +221,16 @@ async def create_behavior(
         preferred_time_slots=request.preferredTimeSlots or ["flexible"],
         is_active=request.isActive,
     )
-    
-    # Map impacts from array to flat fields
-    # We need objective types for this
-    obj_result = await db.execute(select(Objective).where(Objective.user_id == current_user.id))
-    objectives = {obj.id: obj.type.value if hasattr(obj.type, "value") else str(obj.type) for obj in obj_result.scalars().all()}
-    
-    if request.objectiveImpacts:
-        for impact in request.objectiveImpacts:
-            obj_type = objectives.get(impact.objectiveId)
-            if obj_type == "health": behavior.impact_on_health = impact.impactScore
-            elif obj_type == "productivity": behavior.impact_on_productivity = impact.impactScore
-            elif obj_type == "learning": behavior.impact_on_learning = impact.impactScore
-            elif obj_type == "wellness": behavior.impact_on_wellness = impact.impactScore
-            elif obj_type == "social": behavior.impact_on_social = impact.impactScore
-            elif obj_type == "financial": behavior.impact_on_financial = impact.impactScore
-            elif obj_type == "creativity": behavior.impact_on_creativity = impact.impactScore
-            elif obj_type == "mindfulness": behavior.impact_on_mindfulness = impact.impactScore
-
     db.add(behavior)
+    await db.flush()
+
+    if request.objectiveImpacts:
+        await _sync_objective_impacts(db, behavior, request.objectiveImpacts, current_user.id)
+
     await db.commit()
     await db.refresh(behavior)
 
-    objective_map = {v: k for k, v in objectives.items()}
+    objective_map = await get_objective_map(db, current_user.id)
     return ApiResponse(
         data=map_behavior_to_response(behavior, objective_map=objective_map),
         message="Behavior created successfully"
@@ -265,19 +324,9 @@ async def update_behavior(
         behavior.is_active = request.isActive
 
     if request.objectiveImpacts is not None:
-        obj_result = await db.execute(select(Objective).where(Objective.user_id == current_user.id))
-        objectives = {obj.id: obj.type.value if hasattr(obj.type, "value") else str(obj.type) for obj in obj_result.scalars().all()}
-        
-        for impact in request.objectiveImpacts:
-            obj_type = objectives.get(impact.objectiveId)
-            if obj_type == "health": behavior.impact_on_health = impact.impactScore
-            elif obj_type == "productivity": behavior.impact_on_productivity = impact.impactScore
-            elif obj_type == "learning": behavior.impact_on_learning = impact.impactScore
-            elif obj_type == "wellness": behavior.impact_on_wellness = impact.impactScore
-            elif obj_type == "social": behavior.impact_on_social = impact.impactScore
-            elif obj_type == "financial": behavior.impact_on_financial = impact.impactScore
-            elif obj_type == "creativity": behavior.impact_on_creativity = impact.impactScore
-            elif obj_type == "mindfulness": behavior.impact_on_mindfulness = impact.impactScore
+        await _sync_objective_impacts(
+            db, behavior, request.objectiveImpacts, current_user.id
+        )
 
     await db.commit()
     await db.refresh(behavior)

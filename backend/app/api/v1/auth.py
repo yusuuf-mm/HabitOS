@@ -15,6 +15,8 @@ from app.core import (
     verify_token,
     AuthenticationError,
 )
+from app.core.security import TokenTypeError
+from jwt import InvalidTokenError
 from app.models import User, Objective, ObjectiveType
 from app.schemas import (
     UserRegistration,
@@ -128,8 +130,10 @@ async def refresh_token(
     try:
         # Pydantic alias handling means request.refreshToken is mapped to refreshToken in Python if using populate_by_name
         # But wait, request: TokenRefreshRequest will have 'refreshToken' field if we used alias.
-        payload = verify_token(request.refreshToken)
-    except Exception:
+        payload = verify_token(request.refreshToken, expected_type="refresh")
+    except TokenTypeError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token type")
+    except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     user_id = payload.get("sub")

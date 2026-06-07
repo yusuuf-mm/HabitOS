@@ -37,7 +37,13 @@ class TimeSlot(str, Enum):
 
 
 class Behavior(Base):
-    """Behavior model."""
+    """Behavior model.
+
+    Impact on objectives is normalized into the ``objective_impacts`` table —
+    one row per (behavior, objective_type) pair. The legacy eight
+    ``impact_on_*`` columns were removed in the migration that introduced this
+    schema.
+    """
 
     __tablename__ = "behaviors"
 
@@ -52,7 +58,7 @@ class Behavior(Base):
     energy_cost: Mapped[float] = mapped_column(Float, default=1.0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     preferred_time_slots: Mapped[list[TimeSlot]] = mapped_column(
-        ARRAY(SQLEnum(TimeSlot)).with_variant(JSON, "sqlite"), 
+        ARRAY(SQLEnum(TimeSlot)).with_variant(JSON, "sqlite"),
         default=[TimeSlot.FLEXIBLE]
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -61,20 +67,16 @@ class Behavior(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    # Impact on objectives (0-1 scale)
-    impact_on_health: Mapped[float] = mapped_column(Float, default=0.0)
-    impact_on_productivity: Mapped[float] = mapped_column(Float, default=0.0)
-    impact_on_learning: Mapped[float] = mapped_column(Float, default=0.0)
-    impact_on_wellness: Mapped[float] = mapped_column(Float, default=0.0)
-    impact_on_social: Mapped[float] = mapped_column(Float, default=0.0)
-    impact_on_financial: Mapped[float] = mapped_column(Float, default=0.0)
-    impact_on_creativity: Mapped[float] = mapped_column(Float, default=0.0)
-    impact_on_mindfulness: Mapped[float] = mapped_column(Float, default=0.0)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="behaviors")
     completion_logs: Mapped[List["CompletionLog"]] = relationship(back_populates="behavior", cascade="all, delete-orphan")
     scheduled_behaviors: Mapped[List["ScheduledBehavior"]] = relationship(back_populates="behavior", cascade="all, delete-orphan")
+    objective_impacts: Mapped[List["ObjectiveImpact"]] = relationship(
+        back_populates="behavior",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     __table_args__ = (
         Index("idx_behaviors_user_id", "user_id"),
@@ -84,27 +86,14 @@ class Behavior(Base):
 
     def get_impact(self, objective_type: str) -> float:
         """Get impact for specific objective type."""
-        impacts = {
-            "health": self.impact_on_health,
-            "productivity": self.impact_on_productivity,
-            "learning": self.impact_on_learning,
-            "wellness": self.impact_on_wellness,
-            "social": self.impact_on_social,
-            "financial": self.impact_on_financial,
-            "creativity": self.impact_on_creativity,
-            "mindfulness": self.impact_on_mindfulness,
-        }
-        return impacts.get(objective_type, 0.0)
+        for impact in self.objective_impacts:
+            if impact.objective_type.value == objective_type:
+                return impact.impact_score
+        return 0.0
 
     def get_all_impacts(self) -> dict:
-        """Get all impacts as dictionary."""
+        """Get all impacts as a ``{objective_type: score}`` dict."""
         return {
-            "health": self.impact_on_health,
-            "productivity": self.impact_on_productivity,
-            "learning": self.impact_on_learning,
-            "wellness": self.impact_on_wellness,
-            "social": self.impact_on_social,
-            "financial": self.impact_on_financial,
-            "creativity": self.impact_on_creativity,
-            "mindfulness": self.impact_on_mindfulness,
+            impact.objective_type.value: impact.impact_score
+            for impact in self.objective_impacts
         }

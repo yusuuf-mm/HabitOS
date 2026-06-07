@@ -49,6 +49,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Test client with database dependency override."""
+    # Clear any leaked overrides from earlier test modules so we start
+    # with a clean slate.
+    app.dependency_overrides.clear()
+
     async def _get_test_db():
         yield db_session
 
