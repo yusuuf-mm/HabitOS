@@ -283,7 +283,7 @@ export function ScheduleView({
                   {obj.objectiveName}
                 </span>
                 <span className="font-mono text-sm font-medium text-accent">
-                  {(obj.contribution * 100).toFixed(0)}%
+                  {obj.percentage.toFixed(1)}%
                 </span>
               </div>
             ))}

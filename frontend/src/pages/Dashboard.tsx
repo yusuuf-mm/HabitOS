@@ -244,7 +244,7 @@ export default function Dashboard() {
                       <td>
                         <div className="flex items-center gap-1.5">
                           <TrendingUp className="h-4 w-4 text-success" />
-                          <span>{(opt.score * 100).toFixed(0)}%</span>
+                          <span>{opt.score.toFixed(1)}</span>
                         </div>
                       </td>
                       <td className="text-muted-foreground">

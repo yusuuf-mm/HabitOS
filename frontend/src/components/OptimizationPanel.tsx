@@ -168,11 +168,11 @@ export function OptimizationPanel({
                       {obj.objectiveName}
                     </span>
                     <span className="font-medium text-foreground">
-                      {(obj.contribution * 100).toFixed(0)}%
+                      {obj.percentage.toFixed(1)}%
                     </span>
                   </div>
                   <Progress
-                    value={obj.contribution * 100}
+                    value={obj.percentage}
                     className="h-1.5"
                   />
                 </div>

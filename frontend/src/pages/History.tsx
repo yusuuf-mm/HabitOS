@@ -215,7 +215,7 @@ export default function History() {
                             {obj.objectiveName}
                           </span>
                           <span className="font-medium text-accent">
-                            {(obj.contribution * 100).toFixed(0)}%
+                            {obj.percentage.toFixed(1)}%
                           </span>
                         </div>
                       ))}
