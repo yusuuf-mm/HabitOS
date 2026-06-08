@@ -6,6 +6,7 @@ from .objective_impact import ObjectiveImpact
 from .constraint import Constraint, ConstraintType
 from .optimization import OptimizationRun, OptimizationStatus, SolverType, ScheduledBehavior
 from .tracking import CompletionLog
+from .telemetry import HabitTelemetry
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "SolverType",
     "ScheduledBehavior",
     "CompletionLog",
+    "HabitTelemetry",
 ]

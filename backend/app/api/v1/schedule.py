@@ -15,6 +15,7 @@ from app.schemas.schedule import DailySchedule
 from app.schemas.optimization import ScheduledBehaviorResponse, ObjectiveContributionSchema
 from app.schemas.tracking import CompletionLogCreate
 from app.api.v1.behaviors import map_behavior_to_response, get_objective_map
+from app.api.v1.ws import manager
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,8 @@ async def mark_complete(
     db.add(completion_log)
     await db.commit()
 
+    await manager.broadcast_schedule_update(current_user.id)
+
     return ApiResponse(
         success=True,
         message="Behavior marked as complete",
@@ -216,8 +219,182 @@ async def mark_incomplete(
         await db.delete(log)
         await db.commit()
 
+    await manager.broadcast_schedule_update(current_user.id)
+
     return ApiResponse(
         success=True,
         message="Behavior marked as incomplete",
         data={}
+    )
+
+
+@router.post("/reoptimize", response_model=ApiResponse[dict])
+async def partial_reoptimize(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Re-optimize the remaining periods of the current day.
+
+    Freezes all periods before *now* and re-solves the future.  Returns
+    the new optimization run ID and updated schedule.
+    """
+    from datetime import timedelta
+    from uuid import uuid4 as _uuid4
+    from sqlalchemy import select as sa_select
+    from app.models import Objective, Constraint
+    from app.optimization import LinearSolver, OptimizationProblem, BehaviorScheduleInput, ConstraintInput
+
+    target_date = date.today()
+
+    # 1. Find active run
+    run_result = await db.execute(
+        sa_select(OptimizationRun).where(
+            (OptimizationRun.user_id == current_user.id)
+            & (OptimizationRun.start_date <= target_date)
+            & (OptimizationRun.end_date >= target_date)
+            & (OptimizationRun.status == "completed")
+        ).order_by(OptimizationRun.created_at.desc())
+    )
+    run = run_result.scalars().first()
+    if not run:
+        raise HTTPException(status_code=404, detail="No active schedule to re-optimize")
+
+    # 2. Determine current period
+    now = datetime.now(timezone.utc)
+    current_minutes = now.hour * 60 + now.minute
+    current_period = current_minutes // 15
+    day_offset = (target_date - run.start_date).days
+
+    # 3. Fetch all scheduled behaviors + completions
+    sched_result = await db.execute(
+        sa_select(ScheduledBehavior, Behavior)
+        .join(Behavior)
+        .where(ScheduledBehavior.optimization_run_id == run.id)
+    )
+    all_items = sched_result.all()
+
+    comp_result = await db.execute(
+        sa_select(CompletionLog.behavior_id).where(
+            (CompletionLog.user_id == current_user.id)
+            & (CompletionLog.optimization_run_id == run.id)
+        )
+    )
+    completed_ids = {row[0] for row in comp_result.all()}
+
+    # 4. Build frozen periods
+    frozen_periods: dict[int, dict[int, int]] = {}
+    behaviors_db = []
+    behavior_index_map: dict[UUID, int] = {}
+
+    for idx, (sb, behavior) in enumerate(all_items):
+        behavior_index_map[behavior.id] = idx
+        behaviors_db.append(behavior)
+        local_period = sb.time_period % PERIODS_PER_DAY
+        blocks = sb.scheduled_duration // 15
+        for b in range(blocks):
+            t = local_period + b
+            if idx not in frozen_periods:
+                frozen_periods[idx] = {}
+            if t < current_period:
+                frozen_periods[idx][t] = 1 if behavior.id in completed_ids else 0
+
+    # 5. Build problem
+    obj_result = await db.execute(
+        sa_select(Objective).where(Objective.user_id == current_user.id)
+    )
+    objectives_db = obj_result.scalars().all()
+    objectives = {
+        o.type.value if hasattr(o.type, "value") else str(o.type): o.weight
+        for o in objectives_db
+    }
+
+    con_result = await db.execute(
+        sa_select(Constraint).where(
+            (Constraint.user_id == current_user.id) & (Constraint.is_active == True)
+        )
+    )
+    constraints_db = con_result.scalars().all()
+    constraints = [
+        ConstraintInput(
+            type=c.type.value if hasattr(c.type, "value") else str(c.type),
+            parameters=c.parameters,
+            is_active=c.is_active,
+        )
+        for c in constraints_db
+    ]
+
+    problem = OptimizationProblem(
+        user_id=current_user.id,
+        behaviors=[
+            BehaviorScheduleInput(
+                id=b.id,
+                name=b.name,
+                min_duration=b.min_duration,
+                typical_duration=b.typical_duration,
+                max_duration=b.max_duration,
+                energy_cost=b.energy_cost,
+                impacts=b.get_all_impacts(),
+                preferred_time_slots=[
+                    s.value if hasattr(s, "value") else s
+                    for s in b.preferred_time_slots
+                ],
+            )
+            for b in behaviors_db
+        ],
+        objectives=objectives,
+        constraints=constraints,
+        start_date=target_date,
+        end_date=target_date,
+        time_periods=PERIODS_PER_DAY,
+    )
+
+    # 6. Solve
+    new_run_id = _uuid4()
+    solver = LinearSolver(timeout_seconds=30)
+    solution = solver.solve_partial_day(problem, new_run_id, frozen_periods)
+
+    # 7. Persist
+    new_run = OptimizationRun(
+        id=new_run_id,
+        user_id=current_user.id,
+        status="completed" if solution.status == "optimal" else "feasible",
+        solver="linear",
+        start_date=target_date,
+        end_date=target_date,
+        time_periods=PERIODS_PER_DAY,
+        total_objective_value=solution.total_objective_value,
+        results=solution.to_dict(),
+        diagnostics=solution.diagnostics,
+    )
+    db.add(new_run)
+    for item in solution.schedule_items:
+        db.add(ScheduledBehavior(
+            optimization_run_id=new_run_id,
+            behavior_id=item.behavior_id,
+            time_period=item.time_period,
+            scheduled_duration=item.scheduled_duration,
+            is_scheduled=item.is_scheduled,
+        ))
+    await db.commit()
+
+    # 8. Broadcast + return
+    await manager.broadcast_reoptimization(current_user.id, str(new_run_id))
+
+    schedule = []
+    for item in solution.schedule_items:
+        schedule.append({
+            "behavior": item.behavior_name,
+            "behavior_id": str(item.behavior_id),
+            "start": period_to_time(item.time_period % PERIODS_PER_DAY),
+            "end": period_to_time((item.time_period % PERIODS_PER_DAY) + (item.scheduled_duration // 15)),
+            "duration_minutes": item.scheduled_duration,
+        })
+
+    return ApiResponse(
+        data={
+            "new_run_id": str(new_run_id),
+            "status": solution.status,
+            "schedule": schedule,
+        },
+        message="Partial re-optimization completed",
     )
