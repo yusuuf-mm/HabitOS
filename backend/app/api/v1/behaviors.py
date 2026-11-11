@@ -316,6 +316,13 @@ async def update_behavior(
     if not behavior:
         raise HTTPException(status_code=404, detail="Behavior not found")
 
+    # Inactive (soft-deleted) behaviors are read-only unless the request reactivates them.
+    if behavior.is_active is False and request.isActive is not True:
+        raise HTTPException(
+            status_code=409,
+            detail="Behavior is inactive; set isActive=true to reactivate it before editing",
+        )
+
     # Cross-field validation against effective values (including selected windows).
     effective_min = request.durationMin if request.durationMin is not None else behavior.min_duration
     effective_max = request.durationMax if request.durationMax is not None else behavior.max_duration
