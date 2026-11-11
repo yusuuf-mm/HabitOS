@@ -82,3 +82,24 @@ def periods_for_time_slots(slot_names: list[str] | None) -> set[int]:
 def allowed_minutes_for_time_slots(slot_names: list[str] | None) -> int:
     """Total minutes covered by the union of selected windows."""
     return len(periods_for_time_slots(slot_names)) * MINUTES_PER_PERIOD
+
+
+def longest_contiguous_minutes_for_time_slots(slot_names: list[str] | None) -> int:
+    """Longest single contiguous run (minutes) available in the selected windows.
+
+    A session is scheduled as consecutive 15-minute blocks, so it can only span
+    an unbroken run of allowed periods. Non-adjacent windows (e.g. early_morning
+    and midday) cannot be combined into one long session.
+    """
+    periods = sorted(periods_for_time_slots(slot_names))
+    if not periods:
+        return 0
+    best = current = 1
+    for prev, period in zip(periods, periods[1:]):
+        if period == prev + 1:
+            current += 1
+        else:
+            best = max(best, current)
+            current = 1
+    best = max(best, current)
+    return best * MINUTES_PER_PERIOD

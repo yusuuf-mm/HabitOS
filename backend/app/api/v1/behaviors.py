@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete as sa_delete
 
 from app.api.deps import get_db, get_current_active_user
-from app.core.constants import get_time_slot_definitions, allowed_minutes_for_time_slots
+from app.core.constants import get_time_slot_definitions, longest_contiguous_minutes_for_time_slots
 from app.models import User, Behavior, CompletionLog, Objective, ObjectiveType
 from app.models.objective_impact import ObjectiveImpact
 from app.schemas.api import ApiResponse
@@ -325,11 +325,11 @@ async def update_behavior(
         request.preferredTimeSlots if request.preferredTimeSlots is not None else behavior.preferred_time_slots
     )
     slot_values = [s.value if hasattr(s, "value") else str(s) for s in (effective_slots or [])]
-    allowed = allowed_minutes_for_time_slots(slot_values)
+    allowed = longest_contiguous_minutes_for_time_slots(slot_values)
     if effective_min > allowed or effective_max > allowed:
         raise HTTPException(
             status_code=422,
-            detail=f"Duration ({effective_min}-{effective_max} min) cannot fit within selected time windows ({allowed} min available)",
+            detail=f"Duration ({effective_min}-{effective_max} min) cannot fit in any single contiguous run of the selected time windows ({allowed} min available)",
         )
 
     # Update fields

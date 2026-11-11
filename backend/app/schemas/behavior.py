@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from app.models.behavior import BehaviorCategory, TimeSlot
-from app.core.constants import allowed_minutes_for_time_slots
+from app.core.constants import longest_contiguous_minutes_for_time_slots
 
 
 class ObjectiveImpactCreate(BaseModel):
@@ -50,14 +50,14 @@ class BehaviorCreate(BaseModel):
         slot_values = [
             s.value if hasattr(s, "value") else str(s) for s in (self.preferredTimeSlots or [])
         ]
-        allowed = allowed_minutes_for_time_slots(slot_values)
+        allowed = longest_contiguous_minutes_for_time_slots(slot_values)
         if self.durationMin > allowed:
             raise ValueError(
-                f"durationMin ({self.durationMin} min) cannot fit within selected time windows ({allowed} min available)"
+                f"durationMin ({self.durationMin} min) cannot fit in any single contiguous run of the selected time windows ({allowed} min available)"
             )
         if self.durationMax > allowed:
             raise ValueError(
-                f"durationMax ({self.durationMax} min) cannot fit within selected time windows ({allowed} min available)"
+                f"durationMax ({self.durationMax} min) cannot fit in any single contiguous run of the selected time windows ({allowed} min available)"
             )
         return self
 

@@ -45,16 +45,6 @@ type TimeSlotDefinition = {
 
 type ApiEnvelope<T> = { data: T };
 
-const FALLBACK_SLOT_DEFINITIONS: TimeSlotDefinition[] = [
-  { key: "early_morning", label: "Early morning (05:00-07:00)" },
-  { key: "morning", label: "Morning (07:00-12:00)" },
-  { key: "midday", label: "Midday (12:00-14:00)" },
-  { key: "afternoon", label: "Afternoon (14:00-17:00)" },
-  { key: "evening", label: "Evening (17:00-21:00)" },
-  { key: "night", label: "Night (21:00-24:00)" },
-  { key: "flexible", label: "Flexible (05:00-24:00)" },
-];
-
 export function BehaviorForm({
   initialData,
   objectives,
@@ -62,7 +52,7 @@ export function BehaviorForm({
   onCancel,
   isLoading = false,
 }: BehaviorFormProps) {
-  const [slotDefinitions, setSlotDefinitions] = useState<TimeSlotDefinition[]>(FALLBACK_SLOT_DEFINITIONS);
+  const [slotDefinitions, setSlotDefinitions] = useState<TimeSlotDefinition[]>([]);
   const [formData, setFormData] = useState<BehaviorFormData>({
     name: initialData?.name || "",
     description: initialData?.description || "",
@@ -87,7 +77,8 @@ export function BehaviorForm({
         }
       })
       .catch(() => {
-        // Keep fallback (canonical) definitions if backend is unavailable.
+        // No local fallback: the backend definitions are the single source of truth.
+        setSlotDefinitions([]);
       });
     return () => {
       mounted = false;
@@ -265,6 +256,11 @@ export function BehaviorForm({
       <div className="space-y-3">
         <Label>Preferred Time Slots</Label>
         <div className="flex flex-wrap gap-2">
+          {slotDefinitions.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Loading time slots from the backend…
+            </p>
+          )}
           {slotDefinitions.map((slot) => {
             const value = slot.key as TimeSlot;
             const selected = formData.preferredTimeSlots.includes(value);
