@@ -1,1 +1,113 @@
-import pytest\r\nfrom datetime import date\r\nfrom uuid import UUID\r\n\r\nfrom httpx import AsyncClient\r\nfrom sqlalchemy import select\r\n\r\n\r\n@pytest.mark.asyncio\r\nasync def test_get_schedule(auth_client: AsyncClient):\r\n    \"\"\"Test getting daily schedule.\"\"\"\r\n    # First we need an optimization run to have a schedule\r\n    # But for a basic test, even an empty one should return 200\r\n    today = date.today().isoformat()\r\n    response = await auth_client.get(f\"/api/v1/schedule?date={today}\")\r\n    assert response.status_code == 200\r\n    data = response.json()[\"data\"]\r\n    assert data[\"date\"] == today\r\n    assert \"scheduledBehaviors\" in data\r\n\r\n\r\n@pytest.mark.asyncio\r\nasync def test_mark_behavior_completion(auth_client: AsyncClient, db_session):\r\n    \"\"\"Test marking behavior as complete/incomplete.\"\"\"\r\n    # This requires more setup (behavior, optimization run, scheduled behavior)\r\n    # For now, let's verify the endpoint structure even if it returns 404 for non-existent IDs\r\n    invalid_id = \"00000000-0000-0000-0000-000000000000\"\r\n\r\n    response = await auth_client.post(f\"/api/v1/schedule/{invalid_id}/complete\")\r\n    assert response.status_code == 404\r\n\r\n    response = await auth_client.post(f\"/api/v1/schedule/{invalid_id}/incomplete\")\r\n    assert response.status_code == 404\r\n\r\n\r\nasync def _user_id_from_client(async_client: AsyncClient) -> UUID:\r\n    from app.core.security import verify_token\r\n\r\n    token = async_client.headers[\"Authorization\"].replace(\"Bearer \", \"\")\r\n    payload = verify_token(token)\r\n    return UUID(payload[\"sub\"])\r\n\r\n\r\n@pytest.mark.asyncio\r\nasync def test_mark_complete_for_other_user_returns_404_and_creates_no_log(\r\n    auth_client: AsyncClient, client: AsyncClient, db_session\r\n):\r\n    \"\"\"User B must not be able to complete user A's scheduled behavior.\"\"\"\r\n    from app.models import Behavior, BehaviorCategory, OptimizationRun, ScheduledBehavior, CompletionLog\r\n\r\n    user_a_id = await _user_id_from_client(auth_client)\r\n\r\n    # Create user B\r\n    register = await client.post(\r\n        \"/api/v1/auth/register\",\r\n        json={\r\n            \"email\": \"userb@example.com\",\r\n            \"name\": \"User B\",\r\n            \"password\": \"Password123\",\r\n        },\r\n    )\r\n    assert register.status_code in (200, 201)\r\n    login = await client.post(\r\n        \"/api/v1/auth/login\",\r\n        json={\"email\": \"userb@example.com\", \"password\": \"Password123\"},\r\n    )\r\n    assert login.status_code == 200\r\n    user_b_token = login.json()[\"accessToken\"]\r\n\r\n    behavior = Behavior(\r\n        user_id=user_a_id,\r\n        name=\"A's habit\",\r\n        category=BehaviorCategory.HEALTH,\r\n        min_duration=15,\r\n        typical_duration=15,\r\n        max_duration=30,\r\n        energy_cost=1.0,\r\n        preferred_time_slots=[\"morning\"],\r\n    )\r\n    db_session.add(behavior)\r\n    await db_session.flush()\r\n\r\n    run = OptimizationRun(\r\n        user_id=user_a_id,\r\n        status=\"completed\",\r\n        solver=\"linear\",\r\n        start_date=date.today(),\r\n        end_date=date.today(),\r\n        time_periods=96,\r\n    )\r\n    db_session.add(run)\r\n    await db_session.flush()\r\n\r\n    sb = ScheduledBehavior(\r\n        optimization_run_id=run.id,\r\n        behavior_id=behavior.id,\r\n        time_period=16,\r\n        scheduled_duration=15,\r\n    )\r\n    db_session.add(sb)\r\n    await db_session.commit()\r\n\r\n    resp = await client.post(\r\n        f\"/api/v1/schedule/{sb.id}/complete\",\r\n        headers={\"Authorization\": f\"Bearer {user_b_token}\"},\r\n    )\r\n    assert resp.status_code == 404\r\n\r\n    logs = await db_session.execute(\r\n        select(CompletionLog).where(CompletionLog.behavior_id == behavior.id)\r\n    )\r\n    assert logs.scalars().first() is None\r\n
+import pytest
+from datetime import date
+from uuid import UUID
+
+from httpx import AsyncClient
+from sqlalchemy import select
+
+
+@pytest.mark.asyncio
+async def test_get_schedule(auth_client: AsyncClient):
+    """Test getting daily schedule."""
+    # First we need an optimization run to have a schedule
+    # But for a basic test, even an empty one should return 200
+    today = date.today().isoformat()
+    response = await auth_client.get(f"/api/v1/schedule?date={today}")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["date"] == today
+    assert "scheduledBehaviors" in data
+
+
+@pytest.mark.asyncio
+async def test_mark_behavior_completion(auth_client: AsyncClient, db_session):
+    """Test marking behavior as complete/incomplete."""
+    # This requires more setup (behavior, optimization run, scheduled behavior)
+    # For now, let's verify the endpoint structure even if it returns 404 for non-existent IDs
+    invalid_id = "00000000-0000-0000-0000-000000000000"
+
+    response = await auth_client.post(f"/api/v1/schedule/{invalid_id}/complete")
+    assert response.status_code == 404
+
+    response = await auth_client.post(f"/api/v1/schedule/{invalid_id}/incomplete")
+    assert response.status_code == 404
+
+
+async def _user_id_from_client(async_client: AsyncClient) -> UUID:
+    from app.core.security import verify_token
+
+    token = async_client.headers["Authorization"].replace("Bearer ", "")
+    payload = verify_token(token)
+    return UUID(payload["sub"])
+
+
+@pytest.mark.asyncio
+async def test_mark_complete_for_other_user_returns_404_and_creates_no_log(
+    auth_client: AsyncClient, client: AsyncClient, db_session
+):
+    """User B must not be able to complete user A's scheduled behavior."""
+    from app.models import Behavior, BehaviorCategory, OptimizationRun, ScheduledBehavior, CompletionLog
+
+    user_a_id = await _user_id_from_client(auth_client)
+
+    # Create user B
+    register = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "userb@example.com",
+            "name": "User B",
+            "password": "Password123",
+        },
+    )
+    assert register.status_code in (200, 201)
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "userb@example.com", "password": "Password123"},
+    )
+    assert login.status_code == 200
+    user_b_token = login.json()["accessToken"]
+
+    behavior = Behavior(
+        user_id=user_a_id,
+        name="A's habit",
+        category=BehaviorCategory.HEALTH,
+        min_duration=15,
+        typical_duration=15,
+        max_duration=30,
+        energy_cost=1.0,
+        preferred_time_slots=["morning"],
+    )
+    db_session.add(behavior)
+    await db_session.flush()
+
+    run = OptimizationRun(
+        user_id=user_a_id,
+        status="completed",
+        solver="linear",
+        start_date=date.today(),
+        end_date=date.today(),
+        time_periods=96,
+    )
+    db_session.add(run)
+    await db_session.flush()
+
+    sb = ScheduledBehavior(
+        optimization_run_id=run.id,
+        behavior_id=behavior.id,
+        time_period=16,
+        scheduled_duration=15,
+    )
+    db_session.add(sb)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/api/v1/schedule/{sb.id}/complete",
+        headers={"Authorization": f"Bearer {user_b_token}"},
+    )
+    assert resp.status_code == 404
+
+    logs = await db_session.execute(
+        select(CompletionLog).where(CompletionLog.behavior_id == behavior.id)
+    )
+    assert logs.scalars().first() is None
+
