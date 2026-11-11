@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete as sa_delete
 
 from app.api.deps import get_db, get_current_active_user
+from app.core.constants import get_time_slot_definitions, allowed_minutes_for_time_slots
 from app.models import User, Behavior, CompletionLog, Objective, ObjectiveType
 from app.models.objective_impact import ObjectiveImpact
 from app.schemas.api import ApiResponse
@@ -204,6 +205,14 @@ async def list_behaviors(
     )
 
 
+@router.get("/time-slots", response_model=ApiResponse[List[dict]])
+async def list_time_slots(
+    _current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Return canonical time window definitions (single source of truth)."""
+    return ApiResponse(data=get_time_slot_definitions(), message="Time slots retrieved successfully")
+
+
 @router.post("", response_model=ApiResponse[BehaviorResponse], status_code=201)
 async def create_behavior(
     request: BehaviorCreate,
@@ -307,6 +316,22 @@ async def update_behavior(
     if not behavior:
         raise HTTPException(status_code=404, detail="Behavior not found")
 
+    # Cross-field validation against effective values (including selected windows).
+    effective_min = request.durationMin if request.durationMin is not None else behavior.min_duration
+    effective_max = request.durationMax if request.durationMax is not None else behavior.max_duration
+    if effective_max < effective_min:
+        raise HTTPException(status_code=422, detail="durationMax must be >= durationMin")
+    effective_slots = (
+        request.preferredTimeSlots if request.preferredTimeSlots is not None else behavior.preferred_time_slots
+    )
+    slot_values = [s.value if hasattr(s, "value") else str(s) for s in (effective_slots or [])]
+    allowed = allowed_minutes_for_time_slots(slot_values)
+    if effective_min > allowed or effective_max > allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Duration ({effective_min}-{effective_max} min) cannot fit within selected time windows ({allowed} min available)",
+        )
+
     # Update fields
     if request.name is not None:
         behavior.name = request.name
@@ -330,6 +355,7 @@ async def update_behavior(
             db, behavior, request.objectiveImpacts, current_user.id
         )
 
+    behavior.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(behavior)
 

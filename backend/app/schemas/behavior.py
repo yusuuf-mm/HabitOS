@@ -1,10 +1,11 @@
 """Behavior schemas."""
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from app.models.behavior import BehaviorCategory, TimeSlot
+from app.core.constants import allowed_minutes_for_time_slots
 
 
 class ObjectiveImpactCreate(BaseModel):
@@ -41,13 +42,24 @@ class BehaviorCreate(BaseModel):
     frequency: str = Field("daily")
     frequencyCount: Optional[int] = Field(None, validation_alias="frequencyCount")
 
-
-    @validator("durationMax", always=True)
-    def validate_durations(cls, v, values):
-        """Validate duration relationships."""
-        if "durationMin" in values and v < values["durationMin"]:
+    @model_validator(mode="after")
+    def validate_durations_and_windows(self) -> "BehaviorCreate":
+        """Validate duration bounds and fit within selected canonical time windows."""
+        if self.durationMax < self.durationMin:
             raise ValueError("durationMax must be >= durationMin")
-        return v
+        slot_values = [
+            s.value if hasattr(s, "value") else str(s) for s in (self.preferredTimeSlots or [])
+        ]
+        allowed = allowed_minutes_for_time_slots(slot_values)
+        if self.durationMin > allowed:
+            raise ValueError(
+                f"durationMin ({self.durationMin} min) cannot fit within selected time windows ({allowed} min available)"
+            )
+        if self.durationMax > allowed:
+            raise ValueError(
+                f"durationMax ({self.durationMax} min) cannot fit within selected time windows ({allowed} min available)"
+            )
+        return self
 
 
 class BehaviorUpdate(BaseModel):
@@ -64,6 +76,14 @@ class BehaviorUpdate(BaseModel):
     isActive: Optional[bool] = Field(None, validation_alias="isActive")
     frequency: Optional[str] = None
     frequencyCount: Optional[int] = Field(None, validation_alias="frequencyCount")
+
+    @model_validator(mode="after")
+    def validate_partial_durations(self) -> "BehaviorUpdate":
+        """Validate duration relationship when both bounds are provided."""
+        if self.durationMin is not None and self.durationMax is not None:
+            if self.durationMax < self.durationMin:
+                raise ValueError("durationMax must be >= durationMin")
+        return self
 
 
 class BehaviorStatistics(BaseModel):
