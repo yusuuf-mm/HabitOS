@@ -107,11 +107,14 @@ def upgrade() -> None:
     # in the new table means "this behavior meaningfully affects that
     # objective", matching the original mapper's ``impact_score != 0`` filter.
     for enum_value, col in LEGACY_COLUMNS:
+        # The objectivetype enum (initial migration and ORM) stores enum *names*
+        # (HEALTH, ...), not the lowercase Python values, so use the label.
+        label = enum_value.upper()
         if is_sqlite:
             op.execute(
                 sa.text(
                     f"INSERT INTO objective_impacts (behavior_id, objective_type, impact_score) "
-                    f"SELECT id, '{enum_value}', {col} FROM behaviors WHERE {col} != 0"
+                    f"SELECT id, '{label}', {col} FROM behaviors WHERE {col} != 0"
                 )
             )
         else:
@@ -119,7 +122,7 @@ def upgrade() -> None:
             op.execute(
                 sa.text(
                     f"INSERT INTO objective_impacts (behavior_id, objective_type, impact_score) "
-                    f"SELECT id, '{enum_value}'::objectivetype, {col} FROM behaviors WHERE {col} != 0"
+                    f"SELECT id, '{label}'::objectivetype, {col} FROM behaviors WHERE {col} != 0"
                 )
             )
 
@@ -141,24 +144,16 @@ def downgrade() -> None:
 
     # 2. Copy data back from the new normalized table.
     for enum_value, col in LEGACY_COLUMNS:
-        if bind.dialect.name == "sqlite":
-            op.execute(
-                sa.text(
-                    f"UPDATE behaviors SET {col} = COALESCE("
-                    f"(SELECT impact_score FROM objective_impacts "
-                    f"WHERE objective_impacts.behavior_id = behaviors.id "
-                    f"AND objective_type = '{enum_value}'), 0)"
-                )
+        # Match the enum labels actually stored (uppercase names).
+        label = enum_value.upper()
+        op.execute(
+            sa.text(
+                f"UPDATE behaviors SET {col} = COALESCE("
+                f"(SELECT impact_score FROM objective_impacts "
+                f"WHERE objective_impacts.behavior_id = behaviors.id "
+                f"AND objective_type = '{label}'), 0)"
             )
-        else:
-            op.execute(
-                sa.text(
-                    f"UPDATE behaviors SET {col} = COALESCE("
-                    f"(SELECT impact_score FROM objective_impacts "
-                    f"WHERE objective_impacts.behavior_id = behaviors.id "
-                    f"AND objective_type = '{enum_value}'), 0)"
-                )
-            )
+        )
 
     # 3. Drop the normalized table.
     op.drop_index("idx_objective_impacts_type", table_name="objective_impacts")
