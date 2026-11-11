@@ -161,14 +161,16 @@ async def list_behaviors(
     """List user's behaviors."""
     # Get total count
     result = await db.execute(
-        select(func.count(Behavior.id)).where(Behavior.user_id == current_user.id)
+        select(func.count(Behavior.id)).where(
+            (Behavior.user_id == current_user.id) & (Behavior.is_active == True)
+        )
     )
     total = result.scalar() or 0
 
     # Get paginated behaviors
     result = await db.execute(
         select(Behavior)
-        .where(Behavior.user_id == current_user.id)
+        .where((Behavior.user_id == current_user.id) & (Behavior.is_active == True))
         .offset(skip)
         .limit(limit)
     )
@@ -344,7 +346,7 @@ async def delete_behavior(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
-    """Delete a behavior."""
+    """Soft-delete a behavior while preserving history."""
     result = await db.execute(
         select(Behavior).where(
             (Behavior.id == behavior_id) & (Behavior.user_id == current_user.id)
@@ -355,11 +357,12 @@ async def delete_behavior(
     if not behavior:
         raise HTTPException(status_code=404, detail="Behavior not found")
 
-    await db.delete(behavior)
+    behavior.is_active = False
+    behavior.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
     return ApiResponse(
         success=True,
-        message="Behavior deleted successfully",
+        message="Behavior deactivated successfully",
         data={"id": str(behavior_id)}
     )

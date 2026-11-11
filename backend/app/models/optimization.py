@@ -72,7 +72,7 @@ class ScheduledBehavior(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     optimization_run_id: Mapped[UUID] = mapped_column(ForeignKey("optimization_runs.id", ondelete="CASCADE"))
-    behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="CASCADE"))
+    behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="RESTRICT"))
     time_period: Mapped[int] = mapped_column(Integer, nullable=False)
     scheduled_duration: Mapped[int] = mapped_column(Integer, nullable=False)
     is_scheduled: Mapped[bool] = mapped_column(Boolean, default=True)
