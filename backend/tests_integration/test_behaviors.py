@@ -1,4 +1,5 @@
 import pytest
+from uuid import UUID
 from httpx import AsyncClient
 
 async def get_objective_id(auth_client: AsyncClient, objective_type: str) -> str:
@@ -141,12 +142,13 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
     )
     assert create_resp.status_code == 201
     behavior_id = create_resp.json()["data"]["id"]
+    behavior_uuid = UUID(behavior_id)
 
     # Resolve user id
     from app.core.security import verify_token
 
     token = auth_client.headers["Authorization"].replace("Bearer ", "")
-    user_id = verify_token(token)["sub"]
+    user_id = UUID(str(verify_token(token)["sub"]))
 
     run = OptimizationRun(
         user_id=user_id,
@@ -161,7 +163,7 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
 
     sb = ScheduledBehavior(
         optimization_run_id=run.id,
-        behavior_id=behavior_id,
+        behavior_id=behavior_uuid,
         time_period=16,
         scheduled_duration=15,
     )
@@ -170,7 +172,7 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
 
     log = CompletionLog(
         user_id=user_id,
-        behavior_id=behavior_id,
+        behavior_id=behavior_uuid,
         optimization_run_id=run.id,
         actual_duration=15,
         completed_at=datetime.now(timezone.utc),
@@ -179,10 +181,10 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
     await db_session.commit()
 
     before_logs = await db_session.execute(
-        select(func.count(CompletionLog.id)).where(CompletionLog.behavior_id == behavior_id)
+        select(func.count(CompletionLog.id)).where(CompletionLog.behavior_id == behavior_uuid)
     )
     before_scheduled = await db_session.execute(
-        select(func.count(ScheduledBehavior.id)).where(ScheduledBehavior.behavior_id == behavior_id)
+        select(func.count(ScheduledBehavior.id)).where(ScheduledBehavior.behavior_id == behavior_uuid)
     )
     before_summary = await auth_client.get("/api/v1/analytics/summary")
     assert before_summary.status_code == 200
@@ -192,10 +194,10 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
     assert delete_resp.status_code == 200
 
     after_logs = await db_session.execute(
-        select(func.count(CompletionLog.id)).where(CompletionLog.behavior_id == behavior_id)
+        select(func.count(CompletionLog.id)).where(CompletionLog.behavior_id == behavior_uuid)
     )
     after_scheduled = await db_session.execute(
-        select(func.count(ScheduledBehavior.id)).where(ScheduledBehavior.behavior_id == behavior_id)
+        select(func.count(ScheduledBehavior.id)).where(ScheduledBehavior.behavior_id == behavior_uuid)
     )
     after_summary = await auth_client.get("/api/v1/analytics/summary")
     assert after_summary.status_code == 200
