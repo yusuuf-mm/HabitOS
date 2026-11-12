@@ -176,3 +176,24 @@ def downgrade() -> None:
     op.drop_index('idx_users_email', table_name='users')
     op.drop_table('users')
     # ### end Alembic commands ###
+    # Dropping the tables does not drop the Postgres enum types this revision
+    # created, so a later upgrade would collide on CREATE TYPE. Remove them
+    # explicitly, after the dependent tables are gone (no-op elsewhere).
+    _drop_created_enums()
+
+
+CREATED_ENUMS = (
+    "behaviorcategory",
+    "timeslot",
+    "constrainttype",
+    "objectivetype",
+    "optimizationstatus",
+    "solvertype",
+)
+
+
+def _drop_created_enums() -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
+    for name in CREATED_ENUMS:
+        sa.Enum(name=name).drop(op.get_bind(), checkfirst=True)
