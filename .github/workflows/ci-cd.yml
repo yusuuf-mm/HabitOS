@@ -199,6 +199,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+asyncpg://mig_user:mig_password@localhost:5432/mig_db
+      TEST_POSTGRES_URL: postgresql+asyncpg://mig_user:mig_password@localhost:5432/mig_db
       SECRET_KEY: test-secret-key-for-ci-only
       ENVIRONMENT: test
       DEBUG: false
@@ -236,6 +237,10 @@ jobs:
       - name: Check for model/migration drift
         working-directory: ./backend
         run: alembic check
+
+      - name: Check RESTRICT foreign keys against Postgres
+        working-directory: ./backend
+        run: python -m pytest tests_integration/test_restrict_postgres.py -v
 
       - name: Run full test suite
         working-directory: ./backend
