@@ -8,8 +8,6 @@ The CI/CD pipeline automatically:
 1. ✅ **Runs frontend tests** (linting + unit tests + build verification)
 2. ✅ **Runs backend unit tests** (with coverage reporting)
 3. ✅ **Runs backend integration tests** (against PostgreSQL + Redis)
-4. 🚀 **Deploys to Render** (only on successful builds to `main` branch)
-5. 🏥 **Performs health checks** (verifies deployment is successful)
 
 ## 🏗️ Pipeline Architecture
 
@@ -32,14 +30,6 @@ The CI/CD pipeline automatically:
               ┌─────────────────────────┐
               │  All tests passed?      │
               └─────────────────────────┘
-                     ↓ YES (main branch only)
-              ┌─────────────────────────┐
-              │  Deploy to Render       │
-              └─────────────────────────┘
-                            ↓
-              ┌─────────────────────────┐
-              │  Health Check           │
-              └─────────────────────────┘
 ```
 
 ## 🔧 Setup Instructions
@@ -50,32 +40,8 @@ GitHub Actions is enabled by default for all repositories. The workflow will aut
 
 ### Step 2: Configure GitHub Secrets
 
-To enable deployment to Render, you need to add two secrets to your GitHub repository:
-
-1. **Navigate to Repository Settings**:
-   - Go to your GitHub repository
-   - Click **Settings** → **Secrets and variables** → **Actions**
-   - Click **New repository secret**
-
-2. **Add Required Secrets**:
-
-   **Secret 1: `RENDER_DEPLOY_HOOK_URL`** (Required for deployment)
-   - **How to get it**:
-     1. Go to your Render dashboard: https://dashboard.render.com
-     2. Select your `habitos` web service
-     3. Go to **Settings** → **Deploy Hook**
-     4. Click **Create Deploy Hook**
-     5. Copy the URL (looks like: `https://api.render.com/deploy/srv-xxxxx?key=xxxxx`)
-   - **Add to GitHub**:
-     - Name: `RENDER_DEPLOY_HOOK_URL`
-     - Value: `<paste the deploy hook URL>`
-
-   **Secret 2: `RENDER_APP_URL`** (Optional, for health checks)
-   - **How to get it**:
-     - It's your Render app URL: `https://habitos-bnnl.onrender.com`
-   - **Add to GitHub**:
-     - Name: `RENDER_APP_URL`
-     - Value: `https://habitos-bnnl.onrender.com` (or your custom domain)
+None are required. The pipeline only runs tests and the migration gate; there is
+no deploy job and no repository secret is read by the workflow.
 
 ### Step 3: Verify Service Configuration
 
@@ -94,10 +60,10 @@ No additional configuration is needed!
    ```
 
 2. **Create a Pull Request**:
-   - The pipeline will run all tests but **skip deployment**
+   - The pipeline runs all tests and the migration gate
 
 3. **Merge to main**:
-   - After merging, the pipeline will run tests **and deploy** to Render
+   - After merging, the pipeline runs the same jobs again
 
 4. **Monitor the pipeline**:
    - Go to your GitHub repository
@@ -177,27 +143,7 @@ tests_integration/test_analytics.py::test_dashboard_stats PASSED
 Tests: 28 passed (28 total)
 ```
 
-### 4. Deploy (`deploy`)
-
-**What it does**:
-- **Only runs on**: Push to `main` branch
-- **Only runs if**: All tests passed
-- Triggers Render deployment via webhook
-- Waits for deployment to complete
-- Performs health check (retries for up to 5 minutes)
-
-**Runs in**: ~5-10 minutes (Render build time)
-
-**Example output**:
-```
-🚀 Triggering deployment to Render...
-✅ Deployment triggered successfully!
-⏳ Waiting 30 seconds for deployment to start...
-🏥 Performing health check on https://habitos-bnnl.onrender.com/api/health...
-✅ Health check passed! Application is healthy.
-```
-
-### 5. Summary (`summary`)
+### 4. Summary (`summary`)
 
 **What it does**:
 - Runs after all jobs complete
@@ -210,11 +156,11 @@ The pipeline runs on:
 
 ### Push Events
 - **Branches**: `main`, `develop`
-- **Behavior**: Runs all tests + deploys (main only)
+- **Behavior**: Runs all tests and the migration gate
 
 ### Pull Request Events
 - **Target branches**: `main`, `develop`
-- **Behavior**: Runs all tests, skips deployment
+- **Behavior**: Runs all tests and the migration gate
 
 ### Manual Trigger (Optional)
 You can manually trigger the workflow:
@@ -244,14 +190,6 @@ You can manually trigger the workflow:
 #### ❌ Integration tests failing
 - **Cause**: Database connection issues or migration errors
 - **Fix**: Check `DATABASE_URL` is correct, run migrations locally
-
-#### ❌ Deployment failing
-- **Cause**: `RENDER_DEPLOY_HOOK_URL` not set or invalid
-- **Fix**: Verify the secret is correctly configured in GitHub Settings
-
-#### ❌ Health check failing
-- **Cause**: Application not starting on Render
-- **Fix**: Check Render logs for errors, verify environment variables
 
 ## 🔐 Security Best Practices
 
@@ -305,20 +243,6 @@ Backend tests already run in parallel by default. To adjust:
     pytest tests/ -v -n auto  # Uses all CPU cores
 ```
 
-### Deployment Notifications
-
-Add Slack/Discord notifications on deployment:
-```yaml
-- name: Notify Slack
-  uses: slackapi/slack-github-action@v1
-  with:
-    webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-    payload: |
-      {
-        "text": "✅ HabitOS deployed to production!"
-      }
-```
-
 ## 🎓 Next Steps
 
 1. ✅ **Verify pipeline works**: Push a commit and watch the Actions tab
@@ -339,7 +263,6 @@ This ensures no code is merged to `main` without passing all tests!
 ## 📚 Additional Resources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Render Deploy Hooks](https://render.com/docs/deploy-hooks)
 - [Pytest Documentation](https://docs.pytest.org/)
 - [Vitest Documentation](https://vitest.dev/)
 

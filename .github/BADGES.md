@@ -35,7 +35,7 @@ Add the badge near the top of your README.md with your other badges:
 
 **Production-grade Operations Research + AI Engineering platform that transforms life goals into mathematically optimized daily schedules**
 
-[🚀 Live Demo](https://habitos-bnnl.onrender.com) • [📖 Documentation](./docs) • [🐛 Report Bug](https://github.com/yusuuf-mm/HabitOS/issues) • [📋 OpenAPI Spec](./openapi.yaml)
+[📖 Documentation](./docs) • [🐛 Report Bug](https://github.com/yusuuf-mm/HabitOS/issues) • [📋 OpenAPI Spec](./openapi.yaml)
 
 </div>
 ```
@@ -48,12 +48,6 @@ Add the badge near the top of your README.md with your other badges:
 *After setting up Codecov:*
 ```markdown
 [![codecov](https://codecov.io/gh/yusuuf-mm/HabitOS/branch/main/graph/badge.svg)](https://codecov.io/gh/yusuuf-mm/HabitOS)
-```
-
-### Deployment Status
-*For Render:*
-```markdown
-[![Deployment](https://img.shields.io/badge/deployment-active-success)](https://habitos-bnnl.onrender.com)
 ```
 
 ### Latest Release

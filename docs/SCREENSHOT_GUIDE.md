@@ -18,7 +18,7 @@ This guide shows exactly where to add screenshots to the README for maximum impa
 ```
 
 **What to Capture**:
-- Open https://habitos-bnnl.onrender.com
+- Start the app locally and open http://localhost:5173
 - Login or register
 - Navigate to the dashboard
 - Take a full-width screenshot showing:
@@ -96,7 +96,7 @@ The README already includes a Mermaid diagram. GitHub will render it automatical
 **Where to Add**: In "API Documentation" section after the Interactive Docs links
 
 **What to Capture**:
-- Open https://habitos-bnnl.onrender.com/docs
+- Open http://localhost:8000/docs on a running instance
 - Expand a few endpoint sections (e.g., Auth, Behaviors)
 - Screenshot showing:
   - Endpoint list

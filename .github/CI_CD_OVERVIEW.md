@@ -5,11 +5,10 @@
 ### 1. GitHub Actions Workflow
 **File**: `.github/workflows/ci-cd.yml`
 
-A comprehensive CI/CD pipeline with 5 jobs:
+A comprehensive CI/CD pipeline with 4 jobs:
 - **Frontend Tests**: Linting, unit tests, build verification
 - **Backend Unit Tests**: Python tests with coverage
 - **Backend Integration Tests**: Full API tests with PostgreSQL + Redis
-- **Deploy**: Automatic deployment to Render (main branch only)
 - **Summary**: Pipeline status reporting
 
 ### 2. Setup Documentation
@@ -75,10 +74,9 @@ npm run test:backend:integration  # Backend integration tests
 ## 🔧 Setup Requirements
 
 ### Required GitHub Secrets
-1. **`RENDER_DEPLOY_HOOK_URL`** (required for deployment)
-   - Get from: Render Dashboard → Settings → Deploy Hook
-2. **`RENDER_APP_URL`** (optional, for health checks)
-   - Example: `https://habitos-bnnl.onrender.com`
+
+None. The workflow only runs tests and the migration gate, so it reads no
+repository secrets.
 
 ### How to Add Secrets
 1. Go to GitHub repository
@@ -118,21 +116,6 @@ TRIGGER: Push to main/develop OR Pull Request
 ┌───────────────────────────────────────────┐
 │   CHECK: All tests passed?                │
 └───────────────────────────────────────────┘
-    ↓ YES (and branch == main)
-┌───────────────────────────────────────────┐
-│   STAGE 2: DEPLOYMENT                     │
-├───────────────────────────────────────────┤
-│  1. Trigger Render deploy hook            │
-│  2. Wait 30 seconds                       │
-│  3. Health check (retry up to 5 min)      │
-│  4. Verify deployment success             │
-└───────────────────────────────────────────┘
-    ↓
-┌───────────────────────────────────────────┐
-│   STAGE 3: SUMMARY                        │
-├───────────────────────────────────────────┤
-│  Report overall pipeline status           │
-└───────────────────────────────────────────┘
 ```
 
 ---
@@ -147,8 +130,7 @@ git push origin main
 ```
 
 ### 2. Configure secrets
-- Add `RENDER_DEPLOY_HOOK_URL` to GitHub Secrets
-- (Optional) Add `RENDER_APP_URL`
+- None required: the pipeline does not deploy
 
 ### 3. Watch the pipeline
 - Go to GitHub → Actions tab
@@ -175,13 +157,6 @@ Merge to main
     ↓ (~2-3 min)
 GitHub runs all tests
     ↓
-Tests pass → Trigger deployment
-    ↓ (~5-7 min)
-Render builds & deploys
-    ↓ (~30 sec)
-Health check passes
-    ↓
-✅ Deployment complete!
 ```
 
 **Total time from merge to production**: ~8-12 minutes
@@ -236,18 +211,6 @@ npm test
 2. Look for the failed job (red X icon)
 3. Expand the failing step to see error messages
 4. Run the same tests locally to reproduce
-
-### Deployment not triggering?
-- Verify `RENDER_DEPLOY_HOOK_URL` is set in GitHub Secrets
-- Check that you pushed to `main` branch (not develop)
-- Ensure all tests passed
-
-### Health check timing out?
-- Check Render logs for startup errors
-- Verify environment variables are set correctly
-- Ensure database migrations ran successfully
-
----
 
 ## 📚 Documentation
 

@@ -35,7 +35,7 @@ See `/workspaces/HabitOS/docs/SCREENSHOT_GUIDE.md` for detailed instructions on:
 
 ## Quick Guide
 
-1. **Capture screenshots** from https://habitos-bnnl.onrender.com
+1. **Capture screenshots** from a locally running instance (http://localhost:5173)
 2. **Save them here** with the exact filenames listed above
 3. **Use PNG format** at minimum 1920x1080 resolution
 4. **Remove TODO comments** from README.md once images are added
