@@ -72,6 +72,67 @@ capacity), **wide** = `flexible` (1140 min). Durations: **fixed** = exactly 15 m
 Caveat: these are one machine (Windows, local CPU), one CBC build, 12 instances
 with a fixed seed. They establish order of magnitude, not a performance guarantee.
 
+### 1.1 Candidate-placement prototype, measured on the same 12 instances
+
+The section above used the **current block-binary model** (one binary per
+behaviour x 96 periods). The candidate-placement prototype replaces that with one
+binary per *candidate session*: a contiguous run that fits inside a single allowed
+window and whose duration is within `[min, max]`, with `sum(candidates) == 1` per
+behaviour and one session per period. Script: `scratch/bench_candidate.py`; raw
+results in `scratch/bench_candidate_results.json`.
+
+| n | durations | windows | baseline status | base obj | base sessions | base s | candidate status | cand obj | cand sessions | cand s | cand vars |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 10 | fixed | narrow | Optimal | 5.014 | 10 | 1.836 | Optimal | 75.21 | 10 | 0.203 | 200 |
+| 10 | fixed | wide | Optimal | 4.944 | 10 | 0.309 | Optimal | 74.16 | 10 | 0.246 | 760 |
+| 10 | variable | narrow | Optimal | 10.66 | 19 | 0.368 | Optimal | 159.9 | 10 | 0.227 | 536 |
+| 10 | variable | wide | Optimal | 22.232 | 37 | 0.323 | Optimal | 333.48 | 10 | 0.546 | 2446 |
+| 20 | fixed | narrow | Optimal | 10.396 | 20 | 0.610 | Optimal | 155.94 | 20 | 0.314 | 400 |
+| 20 | fixed | wide | Optimal | 11.936 | 20 | 0.735 | Optimal | 179.04 | 20 | 0.466 | 1520 |
+| 20 | variable | narrow | Infeasible | - | - | 0.676 | Infeasible | 111.21 | 17 | 0.478 | 997 |
+| 20 | variable | wide | Optimal | 41.65 | 72 | 0.530 | Optimal | 624.75 | 20 | 1.268 | 4416 |
+| 40 | fixed | narrow | Infeasible | - | - | 0.974 | Infeasible | 177.12 | 26 | 0.229 | 800 |
+| 40 | fixed | wide | Optimal | 21.21 | 40 | 1.278 | Optimal | 318.15 | 40 | 0.508 | 3040 |
+| 40 | variable | narrow | Infeasible | - | - | 0.965 | Infeasible | 159.36 | 17 | 0.315 | 2001 |
+| 40 | variable | wide | Infeasible | - | - | 0.804 | Infeasible | 571.95 | 40 | 1.587 | 7926 |
+
+**What the numbers say.**
+
+1. **Objectives agree once the baseline's unit bug is removed.** `linear.py`
+   returns `lp.objective.value() / MINUTES_PER_PERIOD`, so the block model's
+   figures are 15x smaller than the candidate's: 41.65 x 15 = 624.75 and
+   22.232 x 15 = 333.48 match exactly. Both optimise the same function; the
+   baseline simply reports it in the wrong unit. That scaling defect is worth
+   fixing independently of which formulation we adopt.
+2. **Contiguity is structural only in the candidate model.** For 10 variable
+   behaviours the block model emits 37 sessions (19 for the narrow window) where
+   the candidate emits exactly 10; at n=20 the block model emits 72 sessions
+   against 20. The post-hoc merge in `solve()` is doing real work that the
+   formulation never asked for.
+3. **Speed: the candidate model is faster on 10 of 12 instances** (0.20-0.55 s
+   versus 0.31-1.84 s). It is slower on the two densest cases: 20 variable/wide
+   (1.27 s vs 0.53 s) and 40 variable/wide (1.59 s vs 0.80 s, both infeasible).
+   Both are well inside a synchronous budget.
+4. **Variables:** candidate 200-7,926 versus a fixed 96 x n = 960/1,920/3,840.
+   For narrow windows the candidate model is ~5x smaller (200 vs 960 at n=10);
+   for wide windows with variable durations it is ~2x larger (7,926 vs 3,840).
+5. **Infeasible rows still print an objective** (111.21, 177.12, 159.36,
+   571.95) and a partial session count from the relaxation - the same trap as
+   section 2. Nothing may read `objective` unless the status is optimal/feasible.
+6. **Modelling difference to settle before adopting:** the prototype requires
+   every behaviour to be placed (`sum(y) == 1`), so one behaviour that cannot fit
+   makes the whole day infeasible. The block model silently leaves behaviours
+   out. Optional behaviours (`sum(y) <= 1` plus a penalty, or a two-phase solve)
+   must be specified explicitly; otherwise the measured infeasible rows would
+   become user-visible refusals that did not exist before.
+
+**Recommendation:** adopt candidate-placement as the target formulation, with
+optional behaviours made explicit, once section 9.2's status contract exists -
+it removes the post-hoc merge, guarantees contiguity, and is not slower at these
+sizes. It is a formulation change, so it is out of scope for the current fix pass.
+
+---
+
 ---
 
 ## 2. Item b — forced real CBC timeouts in PuLP 2.8.0
@@ -408,6 +469,9 @@ Revisit after cost-to-fit and protected conflicts ship.
 ```bash
 # benchmark (§1) — writes scratch/bench_cbc_results.json
 cd backend && uv run python ../scratch/bench_cbc.py
+
+# candidate-placement prototype, same instances (§1.1)
+cd backend && uv run python ../scratch/bench_candidate.py
 
 # timeouts (§2)
 cd backend && uv run python ../scratch/timeout_probe.py      # no incumbent
