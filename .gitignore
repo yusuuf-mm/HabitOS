@@ -78,7 +78,12 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
-.env.example (keep this for reference)
+.env.production
+.env.staging
+.env.*
+# Templates stay in the repo and must never contain real values
+!.env.example
+!.env.production.template
 
 # Database
 *.db
