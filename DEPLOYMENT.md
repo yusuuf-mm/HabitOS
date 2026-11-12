@@ -64,7 +64,6 @@ docker-compose -f docker-compose.production.yml --env-file .env.production up -d
 This starts:
 - `habitos-app-prod`: The unified web application container
 - `habitos-db-prod`: PostgreSQL database
-- `habitos-redis-prod`: Redis cache
 
 ### 4. Run Database Migrations
 

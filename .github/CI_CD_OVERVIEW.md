@@ -8,7 +8,7 @@
 A comprehensive CI/CD pipeline with 4 jobs:
 - **Frontend Tests**: Linting, unit tests, build verification
 - **Backend Unit Tests**: Python tests with coverage
-- **Backend Integration Tests**: Full API tests with PostgreSQL + Redis
+- **Backend Integration Tests**: Full API tests with PostgreSQL
 - **Summary**: Pipeline status reporting
 
 ### 2. Setup Documentation
@@ -48,7 +48,6 @@ npm run test:backend:integration  # Backend integration tests
 
 ### ✅ Integration Test Infrastructure
 - **PostgreSQL 15** container for database tests
-- **Redis 7** container for caching tests
 - Automatic database migrations via Alembic
 - Isolated test environment (no prod data)
 
@@ -107,7 +106,7 @@ TRIGGER: Push to main/develop OR Pull Request
 │  │   Backend Integration Tests  │        │
 │  │                              │        │
 │  │ • PostgreSQL 15              │        │
-│  │ • Redis 7                    │        │
+│  │                              │        │
 │  │ • Alembic migrations         │        │
 │  │ • pytest integration/        │        │
 │  └──────────────────────────────┘        │

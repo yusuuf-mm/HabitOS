@@ -7,7 +7,7 @@ This document explains how to set up and use the GitHub Actions CI/CD pipeline f
 The CI/CD pipeline automatically:
 1. ✅ **Runs frontend tests** (linting + unit tests + build verification)
 2. ✅ **Runs backend unit tests** (with coverage reporting)
-3. ✅ **Runs backend integration tests** (against PostgreSQL + Redis)
+3. ✅ **Runs backend integration tests** (against PostgreSQL)
 
 ## 🏗️ Pipeline Architecture
 
@@ -45,7 +45,7 @@ no deploy job and no repository secret is read by the workflow.
 
 ### Step 3: Verify Service Configuration
 
-The integration tests require PostgreSQL and Redis. These are automatically provided by GitHub Actions using Docker containers (see the `services` section in the workflow).
+The integration tests require PostgreSQL. These are automatically provided by GitHub Actions using Docker containers (see the `services` section in the workflow).
 
 No additional configuration is needed!
 
@@ -120,7 +120,7 @@ TOTAL                       892     38    96%
 ### 3. Backend Integration Tests (`backend-integration-tests`)
 
 **What it does**:
-- Spins up PostgreSQL and Redis containers
+- Spins up a PostgreSQL container
 - Installs Python dependencies
 - Runs database migrations (Alembic)
 - Executes integration tests (tests_integration/ folder)
@@ -130,7 +130,6 @@ TOTAL                       892     38    96%
 
 **Services**:
 - **PostgreSQL 15** on port 5432
-- **Redis 7** on port 6379
 
 **Example output**:
 ```

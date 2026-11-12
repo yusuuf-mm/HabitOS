@@ -216,7 +216,6 @@ graph TB
     
     subgraph "Data Layer"
         DB[(PostgreSQL 15)]
-        Cache[(Redis 7)]
         Migrations[Alembic Migrations]
         
         DB --> Migrations
@@ -226,7 +225,6 @@ graph TB
     Query -.HTTP/REST.-> Nginx
     Nginx -.Proxy /api/*.-> API
     
-    Auth --> Cache
     BehaviorEngine --> DB
     OptEngine --> Solver
     OptEngine --> DB
@@ -271,7 +269,6 @@ graph TB
 #### 5. **Data Layer**
 - **Production Database**: PostgreSQL 15 with async driver (asyncpg)
 - **Development Database**: SQLite with aiosqlite for local development
-- **Caching**: Redis 7 for session storage and rate limiting
 - **Migrations**: Alembic for version-controlled schema changes
 - **Multi-Environment Support**: Automatic switching between SQLite (dev) and PostgreSQL (prod) via environment variables
 
@@ -313,7 +310,6 @@ graph TB
 | **python-jose** | JWT token handling | 3.3+ |
 | **passlib** | Password hashing (bcrypt) | 1.7+ |
 | **Uvicorn** | ASGI server | 0.30+ |
-| **Redis** | Caching layer | 7+ |
 | **pytest** | Testing framework | 8.0+ |
 | **pytest-asyncio** | Async test support | 0.23+ |
 
@@ -323,7 +319,6 @@ graph TB
 |:---------|:--------|:------------|
 | **PostgreSQL** | Primary relational database | Production |
 | **SQLite** | Development database | Local |
-| **Redis** | Session store & caching | Production |
 | **Alembic** | Schema version control | All |
 
 ### DevOps & Deployment
@@ -357,7 +352,6 @@ graph TB
 - **Python** 3.11+
 - **Docker** 20.10+ and Docker Compose V2 (for containerized setup)
 - **PostgreSQL** 15+ (if running outside Docker)
-- **Redis** 7+ (if running outside Docker)
 
 ### Option 1: Quick Start (Recommended)
 
@@ -385,7 +379,7 @@ The application will be available at:
 Run the entire stack with Docker:
 
 ```bash
-# Start all services (PostgreSQL, Redis, Backend, Frontend)
+# Start all services (PostgreSQL, Backend, Frontend)
 docker-compose up -d
 
 # Run database migrations
@@ -446,9 +440,6 @@ Key environment variables to configure:
 # Database
 DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/behaviordb
 # Or for development: sqlite+aiosqlite:///./habit_os.db
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
 
 # Security
 SECRET_KEY=<generate-with: openssl rand -hex 32>
@@ -610,7 +601,7 @@ The project uses a comprehensive GitHub Actions pipeline for continuous integrat
 ### Pipeline Stages
 1. **Frontend Verification**: Linting, Type Checking, Unit Tests, Build Verification
 2. **Backend Verification**: Code Quality (Ruff), Unit Tests (Pytest)
-3. **Integration Testing**: Full API tests running against isolated PostgreSQL & Redis containers
+3. **Integration Testing**: Full API tests running against isolated PostgreSQL container
 
 For detailed setup instructions, see the [CI/CD Setup Guide](.github/CI_CD_SETUP.md).
 
