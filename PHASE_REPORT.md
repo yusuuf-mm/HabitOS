@@ -115,6 +115,23 @@ frontend: npm run build     exit 0, "✓ built in 40.61s"
 
 (`1 skipped` is the Postgres RESTRICT test, which needs `TEST_POSTGRES_URL`.)
 
+**CI on this phase (run 43497791412, workflow_dispatch on `feat/planner-v2`)**
+
+First attempt was red in `Backend Unit Tests` and `Backend Migrations`, on a test
+of mine rather than on the product code:
+
+```
+tests/test_solver_contract.py::test_objective_units_are_minutes_not_periods FAILED
+E       ValueError: too many values to unpack (expected 1)
+```
+
+That assertion expected exactly one 60-minute session. The block model has no
+contiguity constraint, so CBC on Linux split the 60 minutes into two sessions
+where the Windows build emitted one. The test now asserts the total scheduled
+minutes (the actual contract) and says in a comment why only the total is
+assertable until Phase 3. That is also a direct argument for the Phase 3
+candidate-placement formulation.
+
 ### 5. Solves off the event loop
 
 `backend/app/optimization/executor.py` runs solves in a `ThreadPoolExecutor` with

@@ -86,8 +86,10 @@ def test_objective_units_are_minutes_not_periods():
     solution = LinearSolver(timeout_seconds=10).solve(problem, uuid4())
 
     assert solution.total_objective_value == pytest.approx(60.0)
-    [item] = solution.schedule_items
-    assert item.scheduled_duration == 60
+    # The block model has no contiguity constraint, so CBC may split these 60
+    # minutes into several sessions depending on the build. Only the total is
+    # contractual until Phase 3 replaces the formulation.
+    assert sum(item.scheduled_duration for item in solution.schedule_items) == 60
 
 
 class _NotSolvedSolver(LinearSolver):
