@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer, Text, Index
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Integer, Text, Index, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -19,6 +19,13 @@ class CompletionLog(Base):
     behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="RESTRICT"))
     optimization_run_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("optimization_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    # Points at one planned session, not just its behaviour, so three sessions of
+    # the same behaviour can be completed independently (docs/METRIC.md §3.1).
+    planned_session_id: Mapped[Optional[UUID]] = mapped_column(
+        Uuid,
+        ForeignKey("scheduled_behaviors.planned_session_id", ondelete="SET NULL"),
+        nullable=True,
     )
     actual_duration: Mapped[int] = mapped_column(Integer, nullable=False)
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -39,4 +46,5 @@ class CompletionLog(Base):
         Index("idx_completion_logs_behavior_id", "behavior_id"),
         Index("idx_completion_logs_completed_at", "completed_at"),
         Index("idx_completion_logs_optimization_run_id", "optimization_run_id"),
+        Index("idx_completion_logs_planned_session_id", "planned_session_id"),
     )

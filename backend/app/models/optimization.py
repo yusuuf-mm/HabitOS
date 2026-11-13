@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Optional, List
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, DateTime, ForeignKey, JSON, Float, Integer, Boolean, Date, Index, Enum as SQLEnum, text
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Float, Integer, Boolean, Date, Index, UniqueConstraint, Uuid, Enum as SQLEnum, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -44,6 +44,15 @@ class OptimizationRun(Base):
     diagnostics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     total_objective_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     execution_time_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Metric bookkeeping (docs/METRIC.md §2): which revision of the day this is,
+    # when the user accepted one, and which revision the day's baseline came from.
+    plan_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    committed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    baseline_revision: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -78,6 +87,20 @@ class ScheduledBehavior(Base):
     time_period: Mapped[int] = mapped_column(Integer, nullable=False)
     scheduled_duration: Mapped[int] = mapped_column(Integer, nullable=False)
     is_scheduled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Stable session identity: survives re-plans and binds completion logs, so the
+    # metric counts sessions rather than behaviours (docs/METRIC.md §1).
+    planned_session_id: Mapped[UUID] = mapped_column(
+        Uuid, nullable=False, default=uuid4
+    )
+    plan_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    # Set when a later revision drops the session; the row is kept so a system
+    # drop stays in the denominator. released_at covers a user release instead.
+    retired_revision: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    released_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -89,4 +112,7 @@ class ScheduledBehavior(Base):
     __table_args__ = (
         Index("idx_scheduled_behaviors_optimization_run_id", "optimization_run_id"),
         Index("idx_scheduled_behaviors_behavior_id", "behavior_id"),
+        UniqueConstraint(
+            "planned_session_id", name="uq_scheduled_behaviors_planned_session_id"
+        ),
     )

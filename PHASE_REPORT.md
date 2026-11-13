@@ -226,7 +226,101 @@ frontend: npx tsc --noEmit exit 0
 
 ## Phase 2 — Sessions you can count
 
-Not started. Waiting on the Phase 1 review, as instructed.
+### The metric, written down first
+
+`docs/METRIC.md` (v1) defines the rate per **session**, against a baseline set `C`
+frozen once per day — at an explicit commit, or at 05:00 plan-local time if the
+user never commits. `completion_rate = completed / (|C| - released)`;
+`released` leaves and is always shown next to the rate; `dropped_by_system` stays
+in the denominator and is reported separately; re-planning can reclassify a session
+but never shrink `C`. `|C| - released == 0` reports `null`, not `1.0`.
+
+`docs/SESSION_SCHEMA.md` is the smallest schema that makes that computable. No
+`plans` table, no per-revision JSON — those stay deferred in `PART_B_DESIGN.md §6`
+until multi-day plans, per-session editing or "show me that day exactly" exist.
+
+### What the schema change does
+
+| table | column | why |
+|---|---|---|
+| `scheduled_behaviors` | `planned_session_id` (uuid, unique) | one session has one identity, across re-plans and inside a completion |
+| | `plan_revision` (int, default 1) | which revision of the day produced it |
+| | `retired_revision` (int, null) | set when a later revision drops it (system drop) |
+| | `released_at` (timestamptz, null) | the user declined it; this is what removes it from the denominator |
+| `completion_logs` | `planned_session_id` (fk, null) | a completion now points at one session, not merely a behaviour |
+| `optimization_runs` | `plan_revision`, `committed_at`, `baseline_revision` | which revision the day's baseline came from, recorded once |
+
+State is derived from those facts (`completed` / `released_by_user` /
+`dropped_by_system` / `missed`), so no status enum can disagree with the
+timestamps it duplicates. Re-planning now stamps the new run and its sessions with
+`plan_revision = previous + 1`.
+
+Migration `f2a3b4c5d6e7` is additive and backfills in place: every existing
+session gets a fresh id, and each old completion is linked to the earliest session
+of that behaviour **in its own run**. Two completions for the same behaviour in
+the same run cannot both be linked (there is one earliest session), so the extras
+stay `NULL` rather than being pointed at a session they may not have completed.
+The downgrade drops only the added columns, constraints and index; seeded rows
+survive.
+
+### Proof, with real seeded rows on Postgres 15
+
+`tools/migration_cycle.sh` (extended; run against a local `postgres:15-alpine`
+container, `docker run --pull never`, port 55433) seeds one user, behaviour, run,
+session and completion at revision `b96cd1f49448`, then walks the whole chain and
+checks it at each step:
+
+```
+== STEP 3: upgrade head ==
+  PASS  revision = f2a3b4c5d6e7
+  PASS  history rows survive upgrade = 1/1/1
+  PASS  every session got a planned_session_id = 1
+  PASS  session plan_revision defaults to 1 = 1
+  PASS  run plan_revision defaults to 1 = 1
+  PASS  legacy completion linked to its session = 1
+  PASS  retired/released start empty = 0
+== STEP 7: downgrade the session snapshot revision ==
+  PASS  revision = e1f2a3b4c5d6
+  PASS  history rows survive snapshot downgrade = 1/1/1
+  PASS  snapshot columns dropped = 0
+  PASS  session id uniqueness constraint dropped = 0
+  PASS  completion FK dropped = 0
+== STEP 8: upgrade head again (re-backfill) ==
+  PASS  revision = f2a3b4c5d6e7
+  PASS  history rows survive second snapshot upgrade = 1/1/1
+  PASS  session ids re-created = 1
+  PASS  completion re-linked = 1
+RESULT: ALL CHECKS PASSED
+```
+
+42 checks passed across the full chain (including the earlier `c1a2b3c4d5e6` and
+`e1f2a3b4c5d6` revisions, which still downgrade and re-upgrade cleanly), and
+`alembic check` on the upgraded database reports **"No new upgrade operations
+detected"** — the models and the migration agree, which is what CI's drift job
+tests.
+
+### Real output
+
+```
+backend:  67 passed, 1 skipped, 1 xpassed
+frontend: 7 tests passed (4 files)
+frontend: npx tsc --noEmit exit 0
+frontend: npm run build exit 0 (built in 19.48s)
+```
+
+### Uncertainties
+
+- `retired_revision` and `released_at` are written by **no endpoint yet**: the
+  columns exist and are backfilled, but there is no release or retire route, so
+  every session currently derives to `completed` or `missed`. That is consistent
+  (nothing produces a wrong number) but the metric is not yet fully computable —
+  it needs the release/retire endpoints and the metric query from the next step.
+- `plan_revision` is stored on both the run and its sessions; nothing enforces
+  that they agree. A re-plan writes both from the same value.
+- The backfill links at most one completion per (run, behaviour). A day that
+  genuinely completed two sessions of the same behaviour before this change will
+  show one linked session; the older data cannot say which, so it is left
+  unlinked rather than guessed.
 
 ## Phase 3 — The planner itself
 
@@ -240,9 +334,9 @@ Not started.
 
 ## Needs a decision
 
-1. **`scratch/` in version control** — ignore it, keep it untracked, or commit the
-   benchmark scripts? Nothing is blocked, but the tree is not clean until this is
-   settled.
-2. **The two grading documents** — `GRADING_CHECKLIST.md` and
-   `docs/README_UPGRADE_SUMMARY.md` still assert the old AI framing and the dead
-   deployment URL. Delete, rewrite, or leave as historical artefacts?
+1. **Settled in Phase 1.5:** `scratch/` is ignored and the scripts live in
+   `tools/`; the two grading documents are archived in `docs/archive/` with a
+   note. Nothing to decide.
+2. **Next, if you want the metric to be real:** a release endpoint and a retire
+   path are needed before release/retire can be counted. Deferred deliberately —
+   they are product surface, not schema.

@@ -385,6 +385,9 @@ async def partial_reoptimize(
         total_objective_value=solution.total_objective_value,
         results=solution.to_dict(),
         diagnostics=solution.diagnostics,
+        # This is a re-plan of an existing day, so it is the next revision of it
+        # (docs/METRIC.md §4). Sessions are stamped with the same number.
+        plan_revision=(run.plan_revision or 1) + 1,
     )
     db.add(new_run)
     for item in solution.schedule_items:
@@ -394,6 +397,7 @@ async def partial_reoptimize(
             time_period=item.time_period,
             scheduled_duration=item.scheduled_duration,
             is_scheduled=item.is_scheduled,
+            plan_revision=(run.plan_revision or 1) + 1,
         ))
     await db.commit()
 
