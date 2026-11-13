@@ -132,6 +132,18 @@ minutes (the actual contract) and says in a comment why only the total is
 assertable until Phase 3. That is also a direct argument for the Phase 3
 candidate-placement formulation.
 
+**Second CI run (43499015502) — green**
+
+```
+Backend Unit Tests          success
+Backend Integration Tests   success
+Backend Migrations          success
+Frontend Tests              success
+CI/CD Summary               success
+```
+
+Local re-run on the same tree: `59 passed, 1 skipped, 1 xpassed in 19.58s`.
+
 ### 5. Solves off the event loop
 
 `backend/app/optimization/executor.py` runs solves in a `ThreadPoolExecutor` with
