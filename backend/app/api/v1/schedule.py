@@ -244,6 +244,7 @@ async def partial_reoptimize(
     from uuid import uuid4 as _uuid4
     from sqlalchemy import select as sa_select
     from app.models import Objective, Constraint
+    from app.core.exceptions import SolverBusyError
     from app.optimization import (
         BehaviorScheduleInput,
         ConstraintInput,
@@ -294,17 +295,22 @@ async def partial_reoptimize(
     behaviors_db = []
     behavior_index_map: dict[UUID, int] = {}
 
-    for idx, (sb, behavior) in enumerate(all_items):
-        behavior_index_map[behavior.id] = idx
-        behaviors_db.append(behavior)
+    for sb, behavior in all_items:
+        # One problem entry per behaviour, not per scheduled session: a behaviour
+        # scheduled twice must not become two independent planners' behaviours,
+        # which would double its minutes and break its duration bounds.
+        if behavior.id not in behavior_index_map:
+            behavior_index_map[behavior.id] = len(behaviors_db)
+            behaviors_db.append(behavior)
+        idx = behavior_index_map[behavior.id]
         local_period = sb.time_period % PERIODS_PER_DAY
         blocks = sb.scheduled_duration // 15
         for b in range(blocks):
             t = local_period + b
-            if idx not in frozen_periods:
-                frozen_periods[idx] = {}
             if t < current_period:
-                frozen_periods[idx][t] = 1 if behavior.id in completed_ids else 0
+                frozen_periods.setdefault(idx, {})[t] = (
+                    1 if behavior.id in completed_ids else 0
+                )
 
     # 5. Build problem
     obj_result = await db.execute(

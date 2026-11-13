@@ -1,3 +1,5 @@
+> **Archived.** This document describes an earlier state of the project.
+
 # HabitOS - Grading Criteria Checklist
 
 This document maps each grading criterion to the corresponding section in the README.md

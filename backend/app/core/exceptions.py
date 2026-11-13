@@ -70,6 +70,13 @@ class SolverTimeoutError(BehaviorOptimizationException):
         super().__init__(message, 408, detail)
 
 
+class SolverBusyError(BehaviorOptimizationException):
+    """Raised when every solver worker is occupied."""
+
+    def __init__(self, message: str = "Solver is busy", detail: str = None):
+        super().__init__(message, 503, detail)
+
+
 class SolverError(BehaviorOptimizationException):
     """Raised when solver encounters an error."""
 

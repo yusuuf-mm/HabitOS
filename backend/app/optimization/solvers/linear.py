@@ -178,13 +178,12 @@ class LinearSolver:
             x: Dict[Tuple[int, int], LpVariable] = {}
             for b_idx in range(B):
                 for t in range(T):
+                    x[(b_idx, t)] = LpVariable(f"x_{b_idx}_{t}", cat="Binary")
+                    # PuLP resets lowBound/upBound for cat="Binary", so a frozen
+                    # value must be pinned with a constraint, not with bounds.
                     if partial and t < earliest_free:
                         val = frozen_periods.get(b_idx, {}).get(t, 0)
-                        x[(b_idx, t)] = LpVariable(
-                            f"x_{b_idx}_{t}", lowBound=val, upBound=val, cat="Binary"
-                        )
-                    else:
-                        x[(b_idx, t)] = LpVariable(f"x_{b_idx}_{t}", cat="Binary")
+                        lp += x[(b_idx, t)] == val, f"frozen_{b_idx}_t{t}"
 
             # ---- objective: weighted impacts x scheduled minutes -----------
             # The value reported to callers is recomputed from the schedule in

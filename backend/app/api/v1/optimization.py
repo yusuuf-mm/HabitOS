@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.core.exceptions import (
     InfeasibleProblemError,
+    SolverBusyError,
     SolverError,
     SolverTimeoutError,
     UnboundedProblemError,
@@ -267,6 +268,13 @@ async def solve_optimization(
 
     except HTTPException:
         raise
+    except SolverBusyError as exc:
+        logger.info("Solver pool busy: %s", exc.detail)
+        raise HTTPException(
+            status_code=503,
+            detail=exc.detail,
+            headers={"Retry-After": "2"},
+        )
     except (InfeasibleProblemError, UnboundedProblemError, SolverTimeoutError) as exc:
         # A solve that produced no trustworthy plan is a normal result, not a bug.
         logger.info("Solve produced no plan: %s", exc.detail)

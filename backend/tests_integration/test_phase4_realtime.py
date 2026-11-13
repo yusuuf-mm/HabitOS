@@ -176,14 +176,14 @@ async def test_partial_reoptimize_returns_new_run(auth_client: AsyncClient, db_s
     sb = ScheduledBehavior(
         optimization_run_id=run.id,
         behavior_id=behavior.id,
-        time_period=80,
+        time_period=30,  # 07:30, inside the behaviour's morning window
         scheduled_duration=30,
     )
     db_session.add(sb)
     await db_session.commit()
 
     resp = await auth_client.post("/api/v1/schedule/reoptimize")
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["data"]["new_run_id"] is not None
     assert body["data"]["status"] in ("optimal", "feasible")

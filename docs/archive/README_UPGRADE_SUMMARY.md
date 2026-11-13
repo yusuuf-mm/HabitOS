@@ -1,3 +1,5 @@
+> **Archived.** This document describes an earlier state of the project.
+
 # 🎉 HabitOS README Upgrade - Complete Summary
 
 ## ✅ What Was Completed

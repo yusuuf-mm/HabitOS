@@ -164,6 +164,66 @@ partial-day re-plan both use it. The pool is shut down in the app lifespan.
 
 ---
 
+## Phase 1.5 — Small hardening
+
+### 1. Time limit, and a pool that says "busy"
+
+CBC was already receiving the limit (`PULP_CBC_CMD(timeLimit=self.timeout_seconds)`);
+a test now patches the command factory and asserts the value arrives, so a
+regression cannot silently drop it and leave CBC running past the await.
+
+The previous pool *queued*: a third request waited behind two solves until its own
+`wait_for` fired. It now admits at most `MAX_SOLVER_WORKERS` (2) solves and refuses
+the rest immediately with `SolverBusyError` (503, `Retry-After: 2`,
+"2 of 2 solver workers are in use; retry in a moment"). Workers are daemon threads
+so a stuck CBC cannot keep the process alive. Admission uses a `threading.Lock`,
+not an asyncio one: a lock cached from a closed event loop deadlocked the next
+loop, which is what made a full suite take 46 minutes once.
+
+Tests: `backend/tests/test_executor.py` (CBC limit, third-solve refusal,
+timeout releases the slot) and route-level `backend/tests_integration/test_solve_errors.py`
+(422 for infeasible/timeout/unbounded with an explanation and no stored run,
+503 for busy with the header, 500 for an unexpected failure without internal text).
+
+### 1a. A real freezing bug found by the new validation
+
+While running the suite, `POST /schedule/reoptimize` failed with
+`Solver produced a schedule that fails validation: Exercise: 120 min above max_duration 60`.
+Cause: frozen periods were pinned with `LpVariable(..., lowBound=val, upBound=val,
+cat="Binary")`, and PuLP **resets both bounds for `cat="Binary"`**. Freezing had
+never worked: elapsed sessions were free to move and the day could be over-filled.
+They are now pinned with explicit `x == val` constraints, and the re-plan route
+builds one problem entry per behaviour instead of one per scheduled row.
+
+### 2. `tools/`
+
+Benchmarks, `migration_cycle.sh`, `audit_slot_windows.py` and the seven timeout
+probes moved out of `scratch/` into `tools/` with `tools/README.md`. Secret scan:
+no real credentials. One throwaway `user:password@localhost:55433` pair for a
+disposable Postgres container (now overridable via `BENCH_DATABASE_URL`), no
+machine-specific absolute paths, no tokens. `scratch/` is now in `.gitignore`;
+logs and the one-off edit scripts were **not** committed.
+
+### 3. Archive
+
+`GRADING_CHECKLIST.md` and `docs/README_UPGRADE_SUMMARY.md` moved to `docs/archive/`
+with a one-line "describes an earlier state of the project" note. Contents otherwise
+untouched.
+
+### 4. Repository description
+
+`gh repo edit yusuuf-mm/HabitOS --description "A constraint-based daily planner with
+partial-day re-optimization"` changed exactly one field: the repo description. No
+other repository settings, branches, secrets or webhooks were touched.
+
+**Real output**
+
+```
+backend:  67 passed, 1 skipped, 1 xpassed in 50.21s
+frontend: 4 files, 7 tests passed, exit 0
+frontend: npx tsc --noEmit exit 0
+```
+
 ## Phase 2 — Sessions you can count
 
 Not started. Waiting on the Phase 1 review, as instructed.
