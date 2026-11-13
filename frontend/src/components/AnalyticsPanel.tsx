@@ -109,45 +109,6 @@ export function AnalyticsPanel({ data }: AnalyticsPanelProps) {
         </div>
       </div>
 
-      {/* Energy Usage */}
-      <div className="dashboard-card space-y-4">
-        <h3 className="font-medium text-foreground">Energy Budget</h3>
-
-        <div className="space-y-2">
-          {data.energyUsage.slice(-5).map((day) => {
-            const percentage = (day.energySpent / day.energyBudget) * 100;
-            const isOver = percentage > 100;
-            return (
-              <div key={day.date} className="flex items-center gap-3">
-                <span className="w-16 text-xs text-muted-foreground">
-                  {new Date(day.date).toLocaleDateString("en-US", {
-                    weekday: "short",
-                  })}
-                </span>
-                <div className="flex-1">
-                  <div className="relative h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn(
-                        "absolute left-0 top-0 h-full rounded-full transition-all",
-                        isOver ? "bg-warning" : "bg-accent"
-                      )}
-                      style={{ width: `${Math.min(percentage, 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    "w-16 text-right text-xs font-medium",
-                    isOver ? "text-warning" : "text-foreground"
-                  )}
-                >
-                  {day.energySpent}/{day.energyBudget}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

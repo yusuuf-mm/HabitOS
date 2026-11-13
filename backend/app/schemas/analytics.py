@@ -85,17 +85,6 @@ class CategoryDistribution(BaseModel):
     percentage: float
 
 
-class EnergyUsage(BaseModel):
-    """Energy usage data."""
-
-    date: date
-    energySpent: int = Field(..., validation_alias="energy_spent", serialization_alias="energySpent")
-    energyBudget: int = Field(..., validation_alias="energy_budget", serialization_alias="energyBudget")
-
-    class Config:
-        populate_by_name = True
-
-
 class AnalyticsData(BaseModel):
     """Analytics data."""
 
@@ -103,7 +92,6 @@ class AnalyticsData(BaseModel):
     behaviorCompletions: List[BehaviorCompletion] = Field(..., validation_alias="behavior_completions", serialization_alias="behaviorCompletions")
     objectiveProgress: List[ObjectiveProgress] = Field(..., validation_alias="objective_progress", serialization_alias="objectiveProgress")
     categoryDistribution: List[CategoryDistribution] = Field(..., validation_alias="category_distribution", serialization_alias="categoryDistribution")
-    energyUsage: List[EnergyUsage] = Field(..., validation_alias="energy_usage", serialization_alias="energyUsage")
 
     class Config:
         populate_by_name = True

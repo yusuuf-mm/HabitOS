@@ -33,7 +33,9 @@ class BehaviorCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=500)
     category: BehaviorCategory = Field(...)
-    energyCost: int = Field(..., ge=1, le=10, validation_alias="energyCost")
+    # Dormant: kept so existing rows and clients keep working, no longer
+    # modelled by the planner.
+    energyCost: int = Field(5, ge=1, le=10, validation_alias="energyCost")
     durationMin: int = Field(..., gt=0, validation_alias="durationMin")
     durationMax: int = Field(..., gt=0, validation_alias="durationMax")
     preferredTimeSlots: List[TimeSlot] = Field(default_factory=lambda: [TimeSlot.FLEXIBLE], validation_alias="preferredTimeSlots")

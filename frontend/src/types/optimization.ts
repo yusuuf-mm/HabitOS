@@ -65,7 +65,6 @@ export interface DailySchedule {
   date: string;
   scheduledBehaviors: ScheduledBehavior[];
   totalDuration: number;
-  totalEnergySpent: number;
   objectiveScores: ObjectiveContribution[];
   createdAt: string;
 }

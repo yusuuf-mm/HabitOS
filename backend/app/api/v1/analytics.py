@@ -18,7 +18,7 @@ from app.models import (
     OptimizationStatus
 )
 from app.schemas.api import ApiResponse
-from app.schemas.analytics import DashboardSummary, DashboardStats, AnalyticsData, BehaviorCompletion, ObjectiveProgress, CategoryDistribution, EnergyUsage, DashboardScheduledBehavior, DashboardBehavior
+from app.schemas.analytics import DashboardSummary, DashboardStats, AnalyticsData, BehaviorCompletion, ObjectiveProgress, CategoryDistribution, DashboardScheduledBehavior, DashboardBehavior
 from app.schemas.optimization import OptimizationSummary, ScheduledBehaviorResponse
 from app.api.v1.behaviors import map_behavior_to_response
 
@@ -340,16 +340,6 @@ async def get_analytics(
             trend="stable",
         ))
     
-    # Energy usage (mock for now)
-    energy_usage = [
-        EnergyUsage(
-            date=start_date + timedelta(days=i),
-            energy_spent=0,
-            energy_budget=100,
-        )
-        for i in range(days)
-    ]
-    
     return ApiResponse(
         success=True,
         message="Analytics retrieved",
@@ -358,6 +348,5 @@ async def get_analytics(
             behavior_completions=behavior_completions,
             objective_progress=objective_progress,
             category_distribution=category_distribution,
-            energy_usage=energy_usage,
         )
     )

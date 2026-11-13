@@ -51,7 +51,6 @@ async def get_daily_schedule(
                 date=target_date,
                 scheduled_behaviors=[],
                 total_duration=0,
-                total_energy_spent=0,
                 objective_scores=[],
                 created_at=datetime.now(timezone.utc),
             ),
@@ -71,7 +70,6 @@ async def get_daily_schedule(
 
     response_items = []
     total_duration = 0
-    total_energy = 0
     
     completion_result = await db.execute(
         select(CompletionLog.optimization_run_id, CompletionLog.behavior_id)
@@ -106,7 +104,6 @@ async def get_daily_schedule(
                 )
             )
             total_duration += sb.scheduled_duration
-            total_energy += behavior.energy_cost
 
     # Reconstruct contributions for objective_scores.
     # Percentage is computed from contribution / total objective value.
@@ -134,7 +131,6 @@ async def get_daily_schedule(
             date=target_date,
             scheduled_behaviors=response_items,
             total_duration=total_duration,
-            total_energy_spent=int(total_energy),
             objective_scores=contributions,
             created_at=run.created_at,
         ),
@@ -248,7 +244,13 @@ async def partial_reoptimize(
     from uuid import uuid4 as _uuid4
     from sqlalchemy import select as sa_select
     from app.models import Objective, Constraint
-    from app.optimization import LinearSolver, OptimizationProblem, BehaviorScheduleInput, ConstraintInput
+    from app.optimization import (
+        BehaviorScheduleInput,
+        ConstraintInput,
+        LinearSolver,
+        OptimizationProblem,
+        run_in_solver_pool,
+    )
 
     target_date = date.today()
 
@@ -357,7 +359,13 @@ async def partial_reoptimize(
     # 6. Solve
     new_run_id = _uuid4()
     solver = LinearSolver(timeout_seconds=30)
-    solution = solver.solve_partial_day(problem, new_run_id, frozen_periods)
+    solution = await run_in_solver_pool(
+        solver.solve_partial_day,
+        problem,
+        new_run_id,
+        frozen_periods,
+        timeout_seconds=30,
+    )
 
     # 7. Persist
     new_run = OptimizationRun(

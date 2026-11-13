@@ -69,9 +69,4 @@ export interface AnalyticsData {
     count: number;
     percentage: number;
   }>;
-  energyUsage: Array<{
-    date: string;
-    energySpent: number;
-    energyBudget: number;
-  }>;
 }

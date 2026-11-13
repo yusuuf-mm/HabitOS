@@ -19,11 +19,18 @@ from app.models import (
     OptimizationRun,
     ScheduledBehavior,
 )
+from app.core.exceptions import (
+    InfeasibleProblemError,
+    SolverError,
+    SolverTimeoutError,
+    UnboundedProblemError,
+)
 from app.optimization import (
     LinearSolver,
     OptimizationProblem,
     BehaviorScheduleInput,
     ConstraintInput,
+    run_in_solver_pool,
 )
 from app.schemas.api import ApiResponse
 from app.schemas.optimization import (
@@ -56,7 +63,6 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
 
     scheduled_behaviors = []
     total_duration = 0
-    total_energy = 0
     for s, b in scheduled_items:
         duration = s.scheduled_duration
         start_time = period_to_time(s.time_period)
@@ -76,7 +82,6 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
             )
         )
         total_duration += duration
-        total_energy += b.energy_cost
 
     # Reconstruct contributions from results JSON.
     # The solver stores ``contribution`` and ``weight`` but not ``percentage``,
@@ -123,7 +128,6 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
         date=run.start_date,
         scheduled_behaviors=scheduled_behaviors,
         total_duration=total_duration,
-        total_energy_spent=int(total_energy),
         objective_scores=contributions,
         created_at=run.created_at,
     )
@@ -216,7 +220,12 @@ async def solve_optimization(
         # Solve
         optimization_run_id = uuid4()
         solver = LinearSolver(timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS)
-        solution = solver.solve(problem, optimization_run_id)
+        solution = await run_in_solver_pool(
+            solver.solve,
+            problem,
+            optimization_run_id,
+            timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS,
+        )
 
         # Save to database
         run = OptimizationRun(
@@ -258,12 +267,16 @@ async def solve_optimization(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f"Optimization error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Optimization failed: {str(e)}",
-        )
+    except (InfeasibleProblemError, UnboundedProblemError, SolverTimeoutError) as exc:
+        # A solve that produced no trustworthy plan is a normal result, not a bug.
+        logger.info("Solve produced no plan: %s", exc.detail)
+        raise HTTPException(status_code=422, detail=exc.detail)
+    except SolverError as exc:
+        logger.error("Solver error: %s", exc.detail)
+        raise HTTPException(status_code=422, detail=exc.detail)
+    except Exception:
+        logger.exception("Optimization error")
+        raise HTTPException(status_code=500, detail="Optimization failed")
 
 
 @router.get("/history", response_model=ApiResponse[OptimizationHistoryResponse])

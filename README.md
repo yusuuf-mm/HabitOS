@@ -1,4 +1,4 @@
-# 🎯 HabitOS: AI-Driven Behavioral Optimization Platform
+# 🎯 HabitOS: Constraint-Based Daily Planner
 
 <div align="center">
 
@@ -52,7 +52,7 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 
-**Production-grade Operations Research + AI Engineering platform that transforms life goals into mathematically optimized daily schedules**
+**A constraint-based daily planner with partial-day re-optimization: life goals and habits in, a mathematically optimized daily schedule out**
 
 [📖 Documentation](./docs) • [🐛 Report Bug](https://github.com/yusuuf-mm/HabitOS/issues) • [📋 OpenAPI Spec](./openapi.yaml)
 
@@ -63,7 +63,6 @@
 ## 📋 Table of Contents
 
 - [Problem Statement](#-problem-statement)
-- [AI-Assisted Development](#-ai-assisted-development)
 - [System Architecture](#-system-architecture)
 - [Technology Stack](#-technology-stack)
 - [Getting Started](#-getting-started)
@@ -109,58 +108,6 @@ Traditional habit trackers fail to solve this problem because they:
 - 📊 **Impact Modeling**: Quantifies how specific habits contribute to broad life goals (e.g., "Morning Jog" → Health: +0.8, Mindfulness: +0.3)
 - 🔒 **Enterprise-Ready**: JWT authentication, role-based access, comprehensive validation, and production deployment
 - 📈 **Analytics Dashboard**: Tracks completion rates, objective progress, energy usage trends, and behavioral patterns
-
----
-
-## 🤖 AI-Assisted Development
-
-### Development Workflow with AI Tools
-
-HabitOS was built using advanced AI-assisted development practices, significantly accelerating development while maintaining code quality and architectural consistency.
-
-#### Primary AI Tools Used
-
-1. **Google Antigravity (Claude-powered Agent)**
-   - **Role**: Primary coding assistant for full-stack development
-   - **Usage**:
-     - Architected the entire system including database schema, API contracts, and frontend state management
-     - Generated and debugged complex optimization algorithms (PuLP-based MILP solver)
-     - Created comprehensive OpenAPI specifications aligned with frontend TypeScript types
-     - Implemented integration tests covering auth, behaviors, optimization, and analytics modules
-     - Resolved deployment issues across multiple platforms (Docker and local environments)
-   
-2. **GitHub Copilot**
-   - **Role**: Inline code completion and pattern suggestion
-   - **Usage**:
-     - Autocompleted repetitive Pydantic model definitions and validation logic
-     - Suggested React component patterns and TypeScript type definitions
-     - Generated boilerplate test cases for unit and integration testing
-
-3. **Custom Prompting Workflows**
-   - Maintained in `AGENTS.md` - documents dependency management (uv), git workflow, and project-specific conventions
-   - See [AGENTS.md](./AGENTS.md) for AI agent guidance used during development
-
-#### Iterative Development Process
-
-The development followed an AI-augmented workflow:
-
-```
-1. Requirements → AI generates OpenAPI spec (contract-first design)
-2. OpenAPI spec → AI scaffolds backend FastAPI routes + Pydantic schemas
-3. OpenAPI spec → AI generates frontend TypeScript types + API client
-4. Implementation → AI assists with business logic, optimization algorithms
-5. Testing → AI generates test cases, helps debug integration issues
-6. Deployment → AI troubleshoots Docker, Nginx, database migration issues
-```
-
-#### Key Achievements with AI
-
-- ⚡ **Reduced development time by ~60%** compared to manual implementation
-- 🔄 **Maintained perfect sync** between frontend TypeScript types and backend Pydantic models via OpenAPI contract
-- 🐛 **Accelerated debugging** with AI-powered log analysis and root cause identification
-- 📚 **Generated comprehensive documentation** including this README and deployment guides
-
-> **Note**: MCP (Model Context Protocol) integration is planned for future iterations. Advanced CI/CD pipelines have been fully implemented using GitHub Actions to further enhance AI-assisted workflows.
 
 ---
 
@@ -960,14 +907,13 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 - **React** - UI library
 - **Shadcn/UI** - Component library
 - **COIN-OR CBC** - Open-source LP solver
-- **Google Antigravity** - AI coding assistant used extensively in development
 
 ---
 
 <div align="center">
 
-**Built with ❤️ using AI-assisted development**
+**Built with ❤️**
 
-[⬆ Back to Top](#-habitos-ai-driven-behavioral-optimization-platform)
+[⬆ Back to Top](#-habitos-constraint-based-daily-planner)
 
 </div>

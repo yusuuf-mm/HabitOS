@@ -203,24 +203,9 @@ export function BehaviorForm({
         </div>
       </div>
 
-      {/* Energy & Duration */}
+      {/* Duration */}
       <div className="space-y-4 rounded-lg border border-border p-4">
-        <h3 className="font-medium text-foreground">Energy & Duration</h3>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label>Energy Cost</Label>
-            <span className="text-sm font-medium text-accent">{formData.energyCost}/10</span>
-          </div>
-          <Slider
-            value={[formData.energyCost]}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, energyCost: value[0] }))}
-            min={1}
-            max={10}
-            step={1}
-            className="w-full"
-          />
-        </div>
+        <h3 className="font-medium text-foreground">Duration</h3>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
