@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Optional, List
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, DateTime, ForeignKey, JSON, Float, Integer, Boolean, Date, Index, Enum as SQLEnum
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Float, Integer, Boolean, Date, Index, Enum as SQLEnum, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -61,7 +61,9 @@ class OptimizationRun(Base):
     __table_args__ = (
         Index("idx_optimization_runs_user_id", "user_id"),
         Index("idx_optimization_runs_status", "status"),
-        Index("idx_optimization_runs_created_at", "created_at", postgresql_using="btree", postgresql_ops={"created_at": "DESC"}),
+        # Declared as a descending expression so the model matches the index the
+        # migration creates (and what Postgres reflects back).
+        Index("idx_optimization_runs_created_at", text("created_at DESC")),
     )
 
 
@@ -72,7 +74,7 @@ class ScheduledBehavior(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     optimization_run_id: Mapped[UUID] = mapped_column(ForeignKey("optimization_runs.id", ondelete="CASCADE"))
-    behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="CASCADE"))
+    behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="RESTRICT"))
     time_period: Mapped[int] = mapped_column(Integer, nullable=False)
     scheduled_duration: Mapped[int] = mapped_column(Integer, nullable=False)
     is_scheduled: Mapped[bool] = mapped_column(Boolean, default=True)

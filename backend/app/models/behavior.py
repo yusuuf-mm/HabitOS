@@ -70,8 +70,8 @@ class Behavior(Base):
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="behaviors")
-    completion_logs: Mapped[List["CompletionLog"]] = relationship(back_populates="behavior", cascade="all, delete-orphan")
-    scheduled_behaviors: Mapped[List["ScheduledBehavior"]] = relationship(back_populates="behavior", cascade="all, delete-orphan")
+    completion_logs: Mapped[List["CompletionLog"]] = relationship(back_populates="behavior")
+    scheduled_behaviors: Mapped[List["ScheduledBehavior"]] = relationship(back_populates="behavior")
     objective_impacts: Mapped[List["ObjectiveImpact"]] = relationship(
         back_populates="behavior",
         cascade="all, delete-orphan",

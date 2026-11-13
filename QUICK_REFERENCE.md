@@ -32,8 +32,7 @@
 
 ## 🔗 Important Links
 
-**Live Deployment**: https://habitos-bnnl.onrender.com  
-**API Docs**: https://habitos-bnnl.onrender.com/docs  
+**Hosting**: being migrated - there is no live URL  
 **GitHub Repo**: https://github.com/yusuuf-mm/HabitOS
 
 ---
@@ -52,7 +51,7 @@
 
 ## 📸 To Add Screenshots (Optional)
 
-1. Visit: https://habitos-bnnl.onrender.com
+1. Run the app locally (see `README.md` → Getting Started)
 2. Capture dashboard screenshot
 3. Save as: `docs/images/dashboard-screenshot.png`
 4. Remove TODO comments from README.md lines 5-6
@@ -91,7 +90,7 @@
 Present these materials:
 
 1. **README.md** - Primary documentation
-2. **Live URL** - https://habitos-bnnl.onrender.com
+2. **Hosting status** - no live URL while the migration is in progress
 3. **Grading Checklist** - Shows 22/24 achievement
 4. **Evidence** - All criteria addressed in README
 

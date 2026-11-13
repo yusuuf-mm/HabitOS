@@ -4,7 +4,7 @@ Validates the combinatorial correctness of the 96-period binary formulation.
 """
 import pytest
 from httpx import AsyncClient
-from app.core.constants import PERIODS_PER_DAY, MINUTES_PER_PERIOD
+from app.core.constants import PERIODS_PER_DAY, MINUTES_PER_PERIOD, periods_for_time_slots
 
 
 def _time_to_period(hhmm: str) -> int:
@@ -41,10 +41,11 @@ def _check_preferences_respected(
 
 @pytest.fixture
 def slot_map() -> dict[str, set[int]]:
+    """Allowed periods from the canonical slot windows (single source of truth)."""
     return {
-        "Morning Run":  set(range(0, 32)),    # early_morning + morning
-        "Deep Work":    set(range(32, 64)),   # midday + afternoon
-        "Evening Read": set(range(64, 80)),   # evening
+        "Morning Run":  periods_for_time_slots(["early_morning", "morning"]),
+        "Deep Work":    periods_for_time_slots(["midday", "afternoon"]),
+        "Evening Read": periods_for_time_slots(["evening"]),
     }
 
 

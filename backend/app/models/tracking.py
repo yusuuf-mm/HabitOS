@@ -16,7 +16,7 @@ class CompletionLog(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="CASCADE"))
+    behavior_id: Mapped[UUID] = mapped_column(ForeignKey("behaviors.id", ondelete="RESTRICT"))
     optimization_run_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("optimization_runs.id", ondelete="SET NULL"), nullable=True
     )

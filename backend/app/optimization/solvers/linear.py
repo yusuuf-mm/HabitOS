@@ -13,7 +13,7 @@ from pulp import (
     LpStatus,
 )
 
-from app.core.constants import MINUTES_PER_PERIOD, PERIODS_PER_DAY
+from app.core.constants import MINUTES_PER_PERIOD, PERIODS_PER_DAY, periods_for_time_slots
 from app.core.exceptions import (
     InfeasibleProblemError,
     UnboundedProblemError,
@@ -28,17 +28,6 @@ from app.optimization.models import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Map TimeSlot enum values to a set of allowable period indices (0 … 95).
-_TIME_SLOT_PERIODS: dict[str, set[int]] = {
-    "early_morning": set(range(0, 16)),
-    "morning":       set(range(16, 32)),
-    "midday":        set(range(32, 48)),
-    "afternoon":     set(range(48, 64)),
-    "evening":       set(range(64, 80)),
-    "night":         set(range(80, 96)),
-    "flexible":      set(range(96)),   # entire day
-}
 
 
 class LinearSolver:
@@ -69,13 +58,8 @@ class LinearSolver:
 
     @staticmethod
     def _periods_for_slots(slot_names: list[str]) -> set[int]:
-        """Return the union of period indices allowed by *slot_names*."""
-        if not slot_names:
-            return set(range(PERIODS_PER_DAY))
-        allowed = set()
-        for name in slot_names:
-            allowed.update(_TIME_SLOT_PERIODS.get(name, set(range(PERIODS_PER_DAY))))
-        return allowed
+        """Return the union of period indices allowed by *slot_names* (canonical windows)."""
+        return periods_for_time_slots(slot_names)
 
     # ------------------------------------------------------------------
     # Public API

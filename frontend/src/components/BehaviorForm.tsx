@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { apiGet } from "@/lib/api";
 import type { BehaviorFormData, BehaviorCategory, TimeSlot, Objective } from "@/types";
 
 interface BehaviorFormProps {
@@ -32,16 +33,17 @@ const CATEGORIES: { value: BehaviorCategory; label: string }[] = [
   { value: "financial", label: "Financial" },
   { value: "creativity", label: "Creativity" },
   { value: "mindfulness", label: "Mindfulness" },
+  { value: "wellness", label: "Wellness" },
 ];
 
-const TIME_SLOTS: { value: TimeSlot; label: string }[] = [
-  { value: "early_morning", label: "Early Morning (5-7am)" },
-  { value: "morning", label: "Morning (7-12pm)" },
-  { value: "midday", label: "Midday (12-2pm)" },
-  { value: "afternoon", label: "Afternoon (2-5pm)" },
-  { value: "evening", label: "Evening (5-9pm)" },
-  { value: "night", label: "Night (9pm+)" },
-];
+type TimeSlotDefinition = {
+  key: TimeSlot | string;
+  label: string;
+  start?: string;
+  end?: string;
+};
+
+type ApiEnvelope<T> = { data: T };
 
 export function BehaviorForm({
   initialData,
@@ -50,6 +52,7 @@ export function BehaviorForm({
   onCancel,
   isLoading = false,
 }: BehaviorFormProps) {
+  const [slotDefinitions, setSlotDefinitions] = useState<TimeSlotDefinition[]>([]);
   const [formData, setFormData] = useState<BehaviorFormData>({
     name: initialData?.name || "",
     description: initialData?.description || "",
@@ -63,6 +66,24 @@ export function BehaviorForm({
     frequency: initialData?.frequency || "daily",
     frequencyCount: initialData?.frequencyCount,
   });
+
+  useEffect(() => {
+    let mounted = true;
+    apiGet<ApiEnvelope<TimeSlotDefinition[]>>("/behaviors/time-slots")
+      .then((res) => {
+        const defs = (res as unknown as ApiEnvelope<TimeSlotDefinition[]>).data;
+        if (mounted && Array.isArray(defs) && defs.length > 0) {
+          setSlotDefinitions(defs);
+        }
+      })
+      .catch(() => {
+        // No local fallback: the backend definitions are the single source of truth.
+        setSlotDefinitions([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleTimeSlotToggle = (slot: TimeSlot) => {
     setFormData((prev) => ({
@@ -235,23 +256,35 @@ export function BehaviorForm({
       <div className="space-y-3">
         <Label>Preferred Time Slots</Label>
         <div className="flex flex-wrap gap-2">
-          {TIME_SLOTS.map((slot) => (
-            <Badge
-              key={slot.value}
-              variant={formData.preferredTimeSlots.includes(slot.value) ? "default" : "outline"}
-              className="cursor-pointer transition-colors"
-              onClick={() => handleTimeSlotToggle(slot.value)}
-            >
-              {slot.label}
-            </Badge>
-          ))}
+          {slotDefinitions.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Loading time slots from the backend…
+            </p>
+          )}
+          {slotDefinitions.map((slot) => {
+            const value = slot.key as TimeSlot;
+            const selected = formData.preferredTimeSlots.includes(value);
+            return (
+              <Badge
+                key={String(slot.key)}
+                variant={selected ? "default" : "outline"}
+                className="cursor-pointer transition-colors"
+                onClick={() => handleTimeSlotToggle(value)}
+              >
+                {slot.label}
+              </Badge>
+            );
+          })}
         </div>
+        <p className="text-xs text-muted-foreground">
+          Labels and windows are provided by the backend (canonical time slots).
+        </p>
       </div>
 
       {/* Objective Impacts */}
       <div className="space-y-3">
         <Label>Objective Impacts</Label>
-        
+
         {formData.objectiveImpacts.length > 0 && (
           <div className="space-y-3">
             {formData.objectiveImpacts.map((impact) => (

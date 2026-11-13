@@ -150,8 +150,11 @@ async def mark_complete(
 ) -> dict:
     """Mark behavior as complete."""
     result = await db.execute(
-        select(ScheduledBehavior).where(
-            ScheduledBehavior.id == scheduled_behavior_id
+        select(ScheduledBehavior)
+        .join(OptimizationRun)
+        .where(
+            (ScheduledBehavior.id == scheduled_behavior_id)
+            & (OptimizationRun.user_id == current_user.id)
         )
     )
     scheduled = result.scalars().first()
@@ -199,8 +202,11 @@ async def mark_incomplete(
 ) -> dict:
     """Mark behavior as incomplete."""
     result = await db.execute(
-        select(ScheduledBehavior).where(
-            ScheduledBehavior.id == scheduled_behavior_id
+        select(ScheduledBehavior)
+        .join(OptimizationRun)
+        .where(
+            (ScheduledBehavior.id == scheduled_behavior_id)
+            & (OptimizationRun.user_id == current_user.id)
         )
     )
     scheduled = result.scalars().first()

@@ -3,7 +3,7 @@ import os
 from functools import lru_cache
 from typing import Optional, List, Any
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic import Field, PostgresDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,9 +47,6 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = Field(default=20, env="DATABASE_POOL_SIZE")
     DATABASE_MAX_OVERFLOW: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
     DATABASE_POOL_PRE_PING: bool = Field(default=True, env="DATABASE_POOL_PRE_PING")
-
-    # Redis
-    REDIS_URL: Optional[RedisDsn] = Field(default=None, env="REDIS_URL")
 
     # Security
     SECRET_KEY: str = Field(

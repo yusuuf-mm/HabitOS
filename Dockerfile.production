@@ -60,15 +60,9 @@ RUN mkdir -p /var/log/supervisor /var/log/nginx /var/run && \
     chown -R www-data:www-data /var/www/html && \
     chmod -R 755 /var/www/html
 
-# Expose default Render port (optional, for documentation)
-EXPOSE 10000
+# Nginx listens on 80 inside the container; docker-compose.production.yml maps
+# ${APP_PORT:-80} to this port.
+EXPOSE 80
 
-
-# Use supervisor to manage both nginx and uvicorn
-
-# Copy startup script
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
-
-# Use startup script to configure nginx port dynamically and start supervisor
-CMD ["/start.sh"]
+# Supervisord manages both nginx and uvicorn
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

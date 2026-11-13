@@ -1,6 +1,12 @@
 # 🚀 HabitOS Production Deployment Guide
 
-This guide explains how to deploy HabitOS using the unified production container.
+This guide explains how to run HabitOS with the unified production container on
+any Docker host you control.
+
+> **Status: hosting is being migrated.** The previous managed-PaaS deployment has
+> been taken down. The frontend is moving to Vercel; the backend host is
+> undecided. The notes below are generic self-hosting instructions, not a
+> description of the current production setup.
 
 ## 📋 Prerequisites
 
@@ -8,14 +14,6 @@ This guide explains how to deploy HabitOS using the unified production container
 - Docker Compose V2
 - At least 2GB free RAM
 - At least 10GB free disk space
-
-## ☁️ Deploy to Render
-
-6.  **Important**: It will ask for environment variables:
-    *   `REDIS_URL`: Paste the **Connection URL** you got from Upstash (starts with `rediss://`, **NOT** the `redis-cli` command).
-    *   `SECRET_KEY`: Generate a random string (e.g., `openssl rand -hex 32` in terminal).
-    *   `JWT_SECRET_KEY`: Generate another random string.
-7.  Click **Apply**.
 
 ## 🔧 Setup Instructions
 
@@ -66,7 +64,6 @@ docker-compose -f docker-compose.production.yml --env-file .env.production up -d
 This starts:
 - `habitos-app-prod`: The unified web application container
 - `habitos-db-prod`: PostgreSQL database
-- `habitos-redis-prod`: Redis cache
 
 ### 4. Run Database Migrations
 

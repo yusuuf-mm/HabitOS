@@ -13,7 +13,6 @@ mypy==1.8.0
 isort==5.13.2
 
 # Type Stubs
-types-redis==4.6.0.10
 
 # Development Tools
 ipython==8.20.0

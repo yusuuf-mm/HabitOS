@@ -18,7 +18,6 @@ Production-grade Operations Research + AI Engineering platform for behavioral op
 
 - Python 3.11+
 - PostgreSQL 14+
-- Redis 6+ (optional)
 - Docker & Docker Compose (for containerized deployment)
 
 ### 🚀 Quick Start

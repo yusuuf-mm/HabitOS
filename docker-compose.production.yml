@@ -19,20 +19,6 @@ services:
       - habitos-network
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    container_name: habitos-redis-prod
-    volumes:
-      - redis_data_prod:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - habitos-network
-    restart: unless-stopped
-
   app:
     build:
       context: .
@@ -41,9 +27,6 @@ services:
     environment:
       # Database
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-habituser}:${DB_PASSWORD:-changeme123}@postgres:5432/${DB_NAME:-habitdb}
-      
-      # Redis
-      REDIS_URL: redis://redis:6379/0
       
       # Application
       ENVIRONMENT: production
@@ -62,8 +45,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - habitos-network
     restart: unless-stopped
@@ -80,4 +61,3 @@ networks:
 
 volumes:
   postgres_data_prod:
-  redis_data_prod:

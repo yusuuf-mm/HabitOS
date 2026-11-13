@@ -69,9 +69,11 @@ async def get_dashboard_summary(
     current_user: User = Depends(get_current_active_user),
 ) -> ApiResponse[DashboardSummary]:
     """Get dashboard summary with real data."""
-    # Total and active behaviors
+    # Total and active behaviors (inactive/soft-deleted behaviors are not counted)
     total_behaviors_result = await db.execute(
-        select(func.count(Behavior.id)).where(Behavior.user_id == current_user.id)
+        select(func.count(Behavior.id)).where(
+            and_(Behavior.user_id == current_user.id, Behavior.is_active == True)
+        )
     )
     total_behaviors = total_behaviors_result.scalar() or 0
     

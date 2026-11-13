@@ -54,7 +54,7 @@
 
 **Production-grade Operations Research + AI Engineering platform that transforms life goals into mathematically optimized daily schedules**
 
-[🚀 Live Demo](https://habitos-bnnl.onrender.com) • [📖 Documentation](./docs) • [🐛 Report Bug](https://github.com/yusuuf-mm/HabitOS/issues) • [📋 OpenAPI Spec](./openapi.yaml)
+[📖 Documentation](./docs) • [🐛 Report Bug](https://github.com/yusuuf-mm/HabitOS/issues) • [📋 OpenAPI Spec](./openapi.yaml)
 
 </div>
 
@@ -127,7 +127,7 @@ HabitOS was built using advanced AI-assisted development practices, significantl
      - Generated and debugged complex optimization algorithms (PuLP-based MILP solver)
      - Created comprehensive OpenAPI specifications aligned with frontend TypeScript types
      - Implemented integration tests covering auth, behaviors, optimization, and analytics modules
-     - Resolved deployment issues across multiple platforms (Render, Docker, local environments)
+     - Resolved deployment issues across multiple platforms (Docker and local environments)
    
 2. **GitHub Copilot**
    - **Role**: Inline code completion and pattern suggestion
@@ -216,7 +216,6 @@ graph TB
     
     subgraph "Data Layer"
         DB[(PostgreSQL 15)]
-        Cache[(Redis 7)]
         Migrations[Alembic Migrations]
         
         DB --> Migrations
@@ -226,7 +225,6 @@ graph TB
     Query -.HTTP/REST.-> Nginx
     Nginx -.Proxy /api/*.-> API
     
-    Auth --> Cache
     BehaviorEngine --> DB
     OptEngine --> Solver
     OptEngine --> DB
@@ -271,7 +269,6 @@ graph TB
 #### 5. **Data Layer**
 - **Production Database**: PostgreSQL 15 with async driver (asyncpg)
 - **Development Database**: SQLite with aiosqlite for local development
-- **Caching**: Redis 7 for session storage and rate limiting
 - **Migrations**: Alembic for version-controlled schema changes
 - **Multi-Environment Support**: Automatic switching between SQLite (dev) and PostgreSQL (prod) via environment variables
 
@@ -313,7 +310,6 @@ graph TB
 | **python-jose** | JWT token handling | 3.3+ |
 | **passlib** | Password hashing (bcrypt) | 1.7+ |
 | **Uvicorn** | ASGI server | 0.30+ |
-| **Redis** | Caching layer | 7+ |
 | **pytest** | Testing framework | 8.0+ |
 | **pytest-asyncio** | Async test support | 0.23+ |
 
@@ -323,7 +319,6 @@ graph TB
 |:---------|:--------|:------------|
 | **PostgreSQL** | Primary relational database | Production |
 | **SQLite** | Development database | Local |
-| **Redis** | Session store & caching | Production |
 | **Alembic** | Schema version control | All |
 
 ### DevOps & Deployment
@@ -334,8 +329,6 @@ graph TB
 | **Docker Compose** | Orchestration | Dev + Production setups |
 | **Nginx** | Reverse proxy & static files | Production container |
 | **Supervisord** | Process manager | Manages Nginx + Uvicorn |
-| **Render** | Cloud platform | PostgreSQL + Web Service |
-| **Upstash** | Redis hosting | Serverless Redis |
 | **GitHub Actions** | CI/CD | Automated testing + deployment |
 
 ### Development Tools
@@ -359,7 +352,6 @@ graph TB
 - **Python** 3.11+
 - **Docker** 20.10+ and Docker Compose V2 (for containerized setup)
 - **PostgreSQL** 15+ (if running outside Docker)
-- **Redis** 7+ (if running outside Docker)
 
 ### Option 1: Quick Start (Recommended)
 
@@ -387,7 +379,7 @@ The application will be available at:
 Run the entire stack with Docker:
 
 ```bash
-# Start all services (PostgreSQL, Redis, Backend, Frontend)
+# Start all services (PostgreSQL, Backend, Frontend)
 docker-compose up -d
 
 # Run database migrations
@@ -448,9 +440,6 @@ Key environment variables to configure:
 # Database
 DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/behaviordb
 # Or for development: sqlite+aiosqlite:///./habit_os.db
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
 
 # Security
 SECRET_KEY=<generate-with: openssl rand -hex 32>
@@ -612,139 +601,36 @@ The project uses a comprehensive GitHub Actions pipeline for continuous integrat
 ### Pipeline Stages
 1. **Frontend Verification**: Linting, Type Checking, Unit Tests, Build Verification
 2. **Backend Verification**: Code Quality (Ruff), Unit Tests (Pytest)
-3. **Integration Testing**: Full API tests running against isolated PostgreSQL & Redis containers
-4. **Deployment**: Automatic deployment to Render on successful `main` branch builds
-5. **Health Checks**: Automated verification of deployment success
+3. **Integration Testing**: Full API tests running against isolated PostgreSQL container
 
 For detailed setup instructions, see the [CI/CD Setup Guide](.github/CI_CD_SETUP.md).
 
 ---
 
-## �🚀 Deployment
+## 🚀 Deployment
 
-### Live Deployment
+> **Status: hosting is being migrated.** The previous deployment (a single
+> container on a managed PaaS) has been taken down. The frontend is moving to
+> Vercel; the backend host is undecided. No live URL is advertised until that
+> work is finished.
 
-**🔗 Production URL**: [https://habitos-bnnl.onrender.com](https://habitos-bnnl.onrender.com)
+### What exists in the repository today
 
-**Platform**: Render (Free Tier)
-- **Web Service**: Unified Docker container (Nginx + Uvicorn + Frontend)
-- **Database**: Managed PostgreSQL instance
-- **Redis**: Upstash serverless Redis
+- `Dockerfile.production`, `nginx.production.conf`, `supervisord.conf` and
+  `docker-compose.production.yml` build one image that serves the built frontend
+  and proxies `/api/*` to Uvicorn. It runs locally with
+  `docker compose -f docker-compose.production.yml --env-file .env.production up -d`.
+- `DEPLOYMENT.md` keeps only generic self-hosting notes (reverse proxy, backups,
+  hardening) - no platform-specific instructions.
+- CI (`.github/workflows/ci-cd.yml`) runs the frontend tests, the backend unit
+  and integration tests, and the migration gate on every push and pull request.
+  It does not deploy anything.
 
-### Deployment Architecture
-
-The production deployment uses a **single unified Docker container** containing:
-
-1. **Nginx** - Serves static frontend files and proxies `/api/*` to backend
-2. **Uvicorn** - Runs FastAPI backend with 2 workers
-3. **Supervisord** - Process manager coordinating Nginx + Uvicorn
-4. **Built Frontend** - Pre-compiled React production build
-
-**Dockerfile Structure**: `Dockerfile.production`
-```dockerfile
-# Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
-COPY frontend/ /app/frontend/
-RUN npm install && npm run build
-
-# Stage 2: Setup backend
-FROM python:3.11-slim
-COPY backend/ /app/backend/
-RUN pip install -r requirements.txt
-
-# Stage 3: Final image
-COPY --from=frontend-builder /app/frontend/dist /var/www/html
-COPY nginx.production.conf /etc/nginx/nginx.conf
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
-```
-
-### Deployment Instructions
-
-#### Deploy to Render (Current Platform)
-
-1. **Fork/Clone** this repository
-2. **Create Render Account** at https://render.com
-3. **Create PostgreSQL Database**:
-   - New → PostgreSQL
-   - Note down the internal connection URL
-4. **Create Redis Instance** (Upstash):
-   - Visit https://upstash.com
-   - Create Redis database
-   - Copy the connection URL (starts with `rediss://`)
-5. **Create Web Service**:
-   - New → Web Service
-   - Connect your repository
-   - Build command: `docker build -f Dockerfile.production -t habitos .`
-   - Start command: Auto-detected from Dockerfile
-6. **Set Environment Variables**:
-   ```bash
-   DATABASE_URL=<Render PostgreSQL Internal URL>
-   REDIS_URL=<Upstash Redis URL>
-   SECRET_KEY=<openssl rand -hex 32>
-   JWT_SECRET_KEY=<openssl rand -hex 32>
-   ENVIRONMENT=production
-   CORS_ORIGINS=https://<your-render-url>.onrender.com
-   ```
-7. **Deploy** - Render will build and deploy automatically
-
-#### Deploy with Docker Compose (Self-Hosted)
-
-For VPS or local production deployment:
-
-```bash
-# Copy production environment template
-cp .env.production.template .env.production
-
-# Edit .env.production with your values
-nano .env.production
-
-# Build production image
-docker build -f Dockerfile.production -t habitos-production:latest .
-
-# Start production stack
-docker-compose -f docker-compose.production.yml --env-file .env.production up -d
-
-# Run migrations
-docker-compose -f docker-compose.production.yml exec app alembic upgrade head
-
-# Check logs
-docker-compose -f docker-compose.production.yml logs -f app
-```
-
-Access at: http://localhost or your configured domain
-
-### Health Checks & Monitoring
-
-**Health Endpoint**: `/api/health`
-
-```bash
-curl https://habitos-bnnl.onrender.com/api/health
-```
-
-**Response**:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2026-02-06T23:53:17Z",
-  "version": "1.0.0"
-}
-```
-
-**Render Monitoring**: Automatic health checks every 30s, auto-restart on failure
-
-### Deployment Best Practices
-
-1. **Database Migrations**: Always run `alembic upgrade head` after deploying backend changes
-2. **Zero-Downtime Deploys**: Render uses rolling deploys (new instance starts before old one stops)
-3. **Environment Secrets**: Never commit `.env` files; use Render's secret management
-4. **Backup Strategy**: Render PostgreSQL includes automated daily backups
-5. **Scaling**: Current setup supports ~1000 concurrent users; scale by increasing Uvicorn workers
-
-For detailed deployment troubleshooting, see [DEPLOYMENT.md](./DEPLOYMENT.md)
+Verified locally on this machine: the backend suite and the frontend suite pass
+(see [Testing](#-testing)). Nothing here has been checked against a hosting
+provider.
 
 ---
-
 ## 📋 API Documentation
 
 ### OpenAPI Specification
@@ -752,8 +638,8 @@ For detailed deployment troubleshooting, see [DEPLOYMENT.md](./DEPLOYMENT.md)
 **📄 Full Spec**: `openapi.yaml` (991 lines, contract-first design)
 
 **Interactive Docs**:
-- **Swagger UI**: [https://habitos-bnnl.onrender.com/docs](https://habitos-bnnl.onrender.com/docs)
-- **ReDoc**: [https://habitos-bnnl.onrender.com/redoc](https://habitos-bnnl.onrender.com/redoc)
+- **Swagger UI**: `/docs` on a running instance
+- **ReDoc**: `/redoc` on a running instance
 
 ### API Contract as Source of Truth
 
@@ -777,7 +663,7 @@ The API development follows **contract-first design**:
 
 **Example Request**:
 ```bash
-curl -X POST https://habitos-bnnl.onrender.com/api/v1/auth/login \
+curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "securepassword"}'
 ```
