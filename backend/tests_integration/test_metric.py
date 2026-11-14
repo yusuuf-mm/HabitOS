@@ -23,6 +23,19 @@ UTC = timezone.utc
 DAY = datetime.now(UTC).date()  # "today" so completion timestamps land inside the day
 
 
+def _future_period(minutes_ahead: int = 120) -> int:
+    """A session slot that has not started yet, whatever time the suite runs.
+
+    The release and commit endpoints use the real clock, so a hard-coded period
+    is only future before that hour. Near midnight there is no such slot left.
+    """
+    now = datetime.now(UTC)
+    period = (now.hour * 60 + now.minute + minutes_ahead) // 15
+    if period >= 96:
+        pytest.skip("no future session slot left in the local day")
+    return period
+
+
 async def _get_user_id(client: AsyncClient) -> UUID:
     from app.core.security import verify_token
 
@@ -285,7 +298,7 @@ async def test_release_endpoint_removes_session_from_denominator(auth_client, db
     user_id = await _get_user_id(auth_client)
     behavior = await _behavior(db_session, user_id)
     run = await _run(db_session, user_id, baseline=1)
-    session = await _session(db_session, run.id, behavior.id, period=80)  # 20:00, later today
+    session = await _session(db_session, run.id, behavior.id, period=_future_period())
     run.start_date = run.end_date = datetime.now(UTC).date()
     await db_session.commit()
 
@@ -311,10 +324,10 @@ async def test_commit_records_exactly_one_baseline_per_day(auth_client, db_sessi
     today = datetime.now(UTC).date()
     first = await _run(db_session, user_id, revision=1)
     first.start_date = first.end_date = today
-    await _session(db_session, first.id, behavior.id, period=80)
+    await _session(db_session, first.id, behavior.id, period=_future_period(180))
     second = await _run(db_session, user_id, revision=2)
     second.start_date = second.end_date = today
-    await _session(db_session, second.id, behavior.id, period=84)
+    await _session(db_session, second.id, behavior.id, period=_future_period(60))
     await db_session.commit()
 
     resp = await auth_client.post("/api/v1/schedule/commit")

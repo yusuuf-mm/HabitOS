@@ -1,0 +1,532 @@
+[
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "feasible",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b1"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b1"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b1"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b1"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "over_capacity",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b0",
+      "b1"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "protected_conflict",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [],
+    "oracle_declined": [
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": false
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  },
+  {
+    "category": "impossible_minimum",
+    "behaviors": 3,
+    "prototype_objective": null,
+    "oracle_objective": null,
+    "prototype_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "oracle_declined": [
+      "b0",
+      "b1",
+      "b2"
+    ],
+    "objective_match": true,
+    "schedule_match": true
+  }
+]

@@ -11,6 +11,10 @@ importable, e.g. `cd backend && uv run python ../tools/bench_cbc.py`.
 | `audit_slot_windows.py` | Lists the canonical time windows and how many periods each covers. |
 | `timeout_probe*.py` | Probes what PuLP/CBC reports (`status`, `objective`, `varValue`) when a solve is cut off by its time limit. Seven variants because the first attempts did not reproduce a stopped solve. |
 | `migration_cycle.sh` | Runs upgrade → downgrade → upgrade with seeded rows, checking data and backfills survive at every step. Needs only a reachable, empty Postgres in `BENCH_DATABASE_URL` (falling back to `DATABASE_URL`); **CI's backend-migrations job runs it** against its service container. |
+| `candidate_model.py` | Prototype candidate-placement solver (docs/FORMULATION.md). Not used by production. |
+| `bench_candidate_v2.py` | Runs the 12-instance benchmark against the block model plus three over-capacity instances; writes `candidate_bench_results.json`. |
+| `oracle.py` | Brute-force optimum for tiny instances (12 periods, 3 behaviours). |
+| `oracle_compare.py` | 40 random tiny instances, prototype vs oracle; writes `oracle_results.json`. |
 | `pg_query.py` | Tiny SQL runner used by `migration_cycle.sh` (`pg_query.py '<sql>'`, or `-` for a script on stdin). Replaces a `psql` dependency so the script runs on a laptop and in CI alike. |
 
 Notes:

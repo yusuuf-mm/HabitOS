@@ -466,9 +466,103 @@ stays in `KNOWN_ISSUES.md`, now with this evidence.
 Phase 4 should not redo any of these; what remains for it is the per-session
 re-solve behaviour and the release/retire UI.
 
-## Phase 3 — The planner itself
+## Phase 3 (first half) — prototype, benchmark, oracle
 
-Not started.
+Production is **not** changed: the candidate-placement model lives in
+`tools/candidate_model.py`, the benchmark and oracle in `tools/`, and the contract
+tests in `backend/tests/test_candidate_model.py` (which imports the prototype from
+`tools/`). `solver/linear.py` is still what the API runs.
+
+### Formulation
+
+`docs/FORMULATION.md`: one binary per candidate session instead of one per
+(behaviour, period), so a selected session is contiguous by construction.
+Protected behaviours are scheduled or declined with a reason (never silently
+skipped); flexible ones may be declined with `no_fit`,
+`preempted_by_protected` or `over_capacity`; multi-session behaviours use
+explicit slots with a minimum gap; frozen periods are excluded from candidate
+generation. The objective is computed from the emitted schedule, exactly as
+`objective.py` does today.
+
+### Benchmark: candidate model vs the current block model
+
+Same 12 instances as `bench_cbc.py` (10/20/40 behaviours, fixed/variable
+durations, narrow/wide windows) plus three over-capacity instances, one machine,
+CBC time limit 30 s. `uv run python tools/bench_candidate_v2.py`.
+
+| instance | block status | block obj | blk sess | blk s | cand obj | cand sess | cand s | declined |
+|---|---|---|---|---|---|---|---|---|
+| 10 fixed narrow | optimal | 75.21 | 10 | 0.47 | 75.21 | 10 | 0.16 | 0 |
+| 10 fixed wide | optimal | 74.16 | 10 | 0.35 | 74.16 | 10 | 0.32 | 0 |
+| 10 variable narrow | optimal | 159.9 | 19 | 0.38 | 223.86 | 5 | 0.33 | 0 |
+| 10 variable wide | optimal | 333.48 | 37 | 0.38 | 333.48 | 10 | 0.80 | 0 |
+| 20 fixed narrow | optimal | 155.94 | 20 | 0.59 | 155.94 | 20 | 0.35 | 0 |
+| 20 fixed wide | optimal | 179.04 | 20 | 0.64 | 179.04 | 20 | 0.54 | 0 |
+| 20 variable narrow | **infeasible** | — | — | 0.60 | 229.89 | 6 | 0.49 | 0 |
+| 20 variable wide | optimal | 624.75 | 72 | 0.72 | 633.42 | 19 | 2.45 | 0 |
+| 40 fixed narrow | **infeasible** | — | — | 1.14 | 198.09 | 20 | 0.37 | 0 |
+| 40 fixed wide | optimal | 318.15 | 40 | 1.21 | 318.15 | 40 | 0.85 | 0 |
+| 40 variable narrow | **infeasible** | — | — | 1.02 | 228.75 | 5 | 0.89 | 0 |
+| 40 variable wide | **infeasible** | — | — | 1.10 | 781.47 | 21 | **31.5 (limit)** | 0 |
+| 15×60 min in a 300 min window | — | — | — | — | −99820 | 5 | 0.34 | 10 (`over_capacity`) |
+| 40×45 min in a 1140 min day | — | — | — | — | 570 | 13 | 3.73 | 0 |
+| 12 protected ×45 min in 300 min | — | — | — | — | −59838 | 6 | 0.43 | 6 (`over_capacity`) |
+
+What the numbers say:
+
+1. **Fixed-duration instances agree exactly** (75.21, 74.16, 155.94, 179.04,
+   318.15) once the old 15× unit bug is gone, which is the correctness check that
+   matters most.
+2. **Contiguity is structural.** 10 variable behaviours: block model 19 sessions
+   (37 wide), candidate model 5–10. 20 variable wide: 72 sessions versus 19.
+3. **Speed favours the candidate model on 10 of 12 instances** (0.16–0.89 s versus
+   0.35–1.21 s), with two exceptions: 20 variable wide (2.45 s vs 0.72 s) and
+   40 variable wide, which **does not finish proving optimality within 30 s**
+   (31.5 s wall). That timeout is the main open issue before replacement.
+4. **The variable-duration objectives differ** (223.86 vs 159.9; 633.42 vs 624.75;
+   781.47 on an instance the block model calls infeasible). This is a modelling
+   difference, not a unit bug: the block model constrains minutes *per selected
+   block* and pays for whatever CBC emits, while the candidate model chooses one
+   session per behaviour and can therefore reach a schedule the block model
+   forbids. It needs review, not silent adoption.
+5. **Over-capacity is reported, not crashed**: protected demand that cannot fit
+   comes back as declines with `over_capacity`, and the objective carries the
+   protected penalty (−99820, −59838).
+
+### Oracle
+
+`tools/oracle.py` brute-forces every decline-or-candidate combination on 12
+periods × 3 behaviours. `tools/oracle_compare.py` runs 40 random instances across
+four categories (feasible, over-capacity, protected conflict, impossible minimum):
+
+```
+objective matches: 40/40
+identical schedules: 24/40
+  feasible             10/10 (identical schedules 2/10)
+  over_capacity        10/10 (identical schedules 10/10)
+  protected_conflict   10/10 (identical schedules 2/10)
+  impossible_minimum   10/10 (identical schedules 10/10)
+```
+
+**Disagreements:** none on the objective. 16 of 40 instances pick a different
+schedule with the *same* value — ties, broken differently by CBC and by the
+oracle's enumeration order — which is expected and is why the contract tests
+assert value and structure, never a particular split.
+
+### Contract tests carried over
+
+`backend/tests/test_candidate_model.py` (8 tests) asserts only what the plan
+promises: one contiguous session per behaviour inside its duration bounds, no
+overlaps, frozen periods never replanned, a behaviour with no room declined and
+reported rather than dropped, protected behaviours all scheduled when they fit,
+protected over-capacity reported with a reason, multi-session count and gap
+respected, and the objective equal to the emitted schedule's value. None of them
+depend on how CBC splits or orders sessions, so they apply to the replacement
+unchanged.
+
+`8 passed in 2.12s`.
+
+**Stopping here** as instructed: no production formulation change.
 
 ## Phase 4 — Re-planning that works
 
