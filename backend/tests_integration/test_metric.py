@@ -417,3 +417,38 @@ async def test_replan_keeps_planned_session_id_across_revisions(auth_client, db_
     # same session: same id, whichever period it ended up in.
     assert {s.planned_session_id for s in first_sessions} == {original_id}
     assert {s.plan_revision for s in first_sessions} == {2}
+
+
+@pytest.mark.asyncio
+async def test_solve_returns_409_when_todays_baseline_is_frozen(auth_client, db_session):
+    """/optimization/solve must not create a second plan for a frozen day."""
+    user_id = await _get_user_id(auth_client)
+    behavior = await _behavior(db_session, user_id)
+    today = datetime.now(UTC).date()
+    run = await _run(db_session, user_id, baseline=1)
+    run.start_date = run.end_date = today
+    await _session(db_session, run.id, behavior.id, period=_future_period())
+    await db_session.commit()
+
+    resp = await auth_client.post(
+        "/api/v1/optimization/solve", json={"targetDate": str(today)}
+    )
+    assert resp.status_code == 409, resp.text
+    assert "baseline is set; use re-plan" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_solve_for_a_future_day_is_unaffected(auth_client, db_session):
+    user_id = await _get_user_id(auth_client)
+    behavior = await _behavior(db_session, user_id)
+    today = datetime.now(UTC).date()
+    run = await _run(db_session, user_id, baseline=1)
+    run.start_date = run.end_date = today
+    await _session(db_session, run.id, behavior.id, period=_future_period())
+    await db_session.commit()
+
+    tomorrow = today + timedelta(days=1)
+    resp = await auth_client.post(
+        "/api/v1/optimization/solve", json={"targetDate": str(tomorrow)}
+    )
+    assert resp.status_code != 409, resp.text

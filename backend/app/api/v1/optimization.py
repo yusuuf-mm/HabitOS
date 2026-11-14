@@ -11,6 +11,7 @@ from sqlalchemy import select, func
 from app.api.deps import get_db, get_current_active_user
 from app.core import settings
 from app.core.constants import period_to_time, PERIODS_PER_DAY
+from app.services.metrics import local_today, resolve_day_plan, user_zone
 from app.models import (
     User,
     Behavior,
@@ -203,9 +204,25 @@ async def solve_optimization(
         ]
 
         # Determine time periods and dates
-        start_date = request.targetDate or date_class.today()
+        tz = user_zone(current_user)
+        today_local = local_today(tz)
+        start_date = request.targetDate or today_local
         time_periods = PERIODS_PER_DAY  # 96 x 15-minute blocks = 1 full day
         end_date = start_date
+
+        # Once today's baseline is frozen, a fresh plan would be a plan the metric
+        # cannot count and the user did not ask for: re-planning is the way to
+        # change today. Future days are unaffected (docs/METRIC.md §2).
+        if start_date == today_local:
+            plan = await resolve_day_plan(db, current_user, today_local)
+            if plan.frozen:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "baseline is set; use re-plan "
+                        "(POST /api/v1/schedule/reoptimize) instead of generating a new plan."
+                    ),
+                )
 
         # Create optimization problem
         problem = OptimizationProblem(

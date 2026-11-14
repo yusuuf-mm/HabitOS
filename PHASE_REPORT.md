@@ -466,6 +466,123 @@ stays in `KNOWN_ISSUES.md`, now with this evidence.
 Phase 4 should not redo any of these; what remains for it is the per-session
 re-solve behaviour and the release/retire UI.
 
+## Phase 2.5 fix round — solve guard and tzdata
+
+**`POST /optimization/solve` is refused for a frozen today.** If today already has
+a baseline (committed, or frozen by 05:00 / the first session), the endpoint
+returns `409` with `baseline is set; use re-plan (POST /api/v1/schedule/reoptimize)
+instead of generating a new plan.` Future days are unchanged, and a day with no
+frozen baseline is unchanged. Tests:
+`test_solve_returns_409_when_todays_baseline_is_frozen` and
+`test_solve_for_a_future_day_is_unaffected`.
+
+**tzdata is a dependency.** Added with `uv add tzdata` (2026.6) and pinned in
+`backend/requirements.txt`, so the timezone test runs instead of skipping on a
+machine without a tz database. The metric suite is now **14 passed, 0 skipped**.
+
+## Phase 3 gate — like-for-like, one objective, declines, speed, oracle
+
+### 1. Like-for-like (every behaviour forced in, one session each)
+
+| instance | block | block obj | candidate | cand obj | delta |
+|---|---|---|---|---|---|
+| 10 fixed narrow | optimal | 75.21 | optimal | 75.21 | 0.0 |
+| 10 fixed wide | optimal | 74.16 | optimal | 74.16 | 0.0 |
+| 10 variable narrow | optimal | 159.9 | optimal | 159.9 | 0.0 |
+| 10 variable wide | optimal | 333.48 | optimal | 333.48 | 0.0 |
+| 20 fixed narrow | optimal | 155.94 | optimal | 155.94 | 0.0 |
+| 20 fixed wide | optimal | 179.04 | optimal | 179.04 | 0.0 |
+| 20 variable narrow | infeasible | — | Infeasible | — | — |
+| 20 variable wide | optimal | 624.75 | optimal | 624.75 | 0.0 |
+| 40 × 4 cases | mixed | — | refused (cap 25) | — | — |
+
+**Cases where the candidate is higher: 0.** The earlier gap (223.86 vs 159.9) came
+from the candidate model being allowed to decline; with declines removed its
+feasible region is a subset of the block model's, and the values are identical on
+every instance both can solve. The 20-variable-narrow instance is infeasible for
+both, so the models agree there too.
+
+### 2. One objective definition
+
+The prototype now reports `objective` = placement value of the emitted sessions
+(the `objective.py` definition), and `solver_objective` = the penalised LP value
+(decline penalties included) separately. In the five-protected-behaviour test the
+plan value is `60.0` while the solver objective is `−39940.0`; the test
+`test_solver_objective_is_reported_separately_from_plan_value` asserts they differ
+and that only the placement value matches the emitted minutes.
+
+### 3. Declines explained (`tools/decline_analysis.py`)
+
+| case | scheduled | declined | reason | arithmetic |
+|---|---|---|---|---|
+| 10 variable narrow | 5 | 5 | `no_fit` | the 300-minute morning window is full; no candidate fits the free periods |
+| 15 × 60 min, 300 min window | 5 | 10 | `over_capacity` | 300 / 60 = 5 protected sessions fit |
+| 12 protected × 45 min, 300 min | 6 | 6 | `over_capacity` | 300 / 45 = 6 fit, the 7th needs 315 min |
+| 40 × 45 min, 1140 min | — | — | refused | 40 behaviours exceed the 25 cap |
+
+The audit reports **0 declines with free capacity and positive value**, i.e. no
+decline that needs an explanation beyond capacity or a window conflict.
+
+**Bug found and fixed by this gate:** a multi-session behaviour could be both
+scheduled and declined at once (the constraint was `selected + z ≤ sessions`).
+The oracle caught it in 200/200 multi-session instances; the constraint is now
+`selected + z·sessions ≤ sessions` and `selected + z ≥ 1`.
+
+### 4. Speed (cap, duration step, 30-minute starts)
+
+| instance | candidate status | sessions | seconds |
+|---|---|---|---|
+| 10 fixed narrow | optimal | 10 | 0.14 |
+| 10 fixed wide | optimal | 10 | 0.25 |
+| 10 variable narrow | optimal | 5 | 0.26 |
+| 10 variable wide | optimal | 10 | 0.41 |
+| 20 fixed narrow | optimal | 20 | 0.18 |
+| 20 fixed wide | optimal | 20 | 0.44 |
+| 20 variable narrow | optimal | 6 | 0.33 |
+| 20 variable wide | optimal | 19 | 1.61 |
+| 25 fixed wide | optimal | 25 | 0.39 |
+| 25 variable wide | optimal | 21 | 3.02 |
+| 40 × 4 cases | refused | — | — |
+| over-capacity × 3 | optimal with declines | 5 / 13 / 6 | 0.24 / — / 0.26 |
+
+Criteria: every instance up to 20 behaviours proves optimality in under 3 s
+(max 1.61 s); 21–25 prove optimality within the 30 s limit (max 3.02 s at 25
+variable/wide); nothing returns a non-optimal plan (instances above the cap are
+refused with a message, never truncated). **PASS.**
+
+The cap is 25 active behaviours per plan, the candidate duration step keeps at
+most 8 lengths per behaviour (always including min and max), and starts align to
+30 minutes whenever the duration is a multiple of 30.
+
+### 5. Oracle — 1,000 instances
+
+Four behaviours, 12–16 periods, five categories, 200 each:
+
+```
+objective matches: 1000/1000
+instances with validation violations: 0
+  feasible             200/200 (violations 0)
+  multi_session_gap    200/200 (violations 0)
+  frozen               200/200 (violations 0)
+  protected_conflict   200/200 (violations 0)
+  over_capacity        200/200 (violations 0)
+production validate_schedule: 100/100 clean
+```
+
+Both schedules pass `validate_plan` (bounds, windows, overlap, frozen periods,
+session count, gap, protected-never-silent). A 100-instance canonical set also
+passes the production `validate_schedule`; the 12–16-period instances cannot be
+expressed in its named-slot model without distorting them, which is why both
+validators are reported.
+
+### Not attempted: steps 8–11
+
+The gate passed, but replacing the production formulation, the forced-include
+endpoint, editable objective weights and the shipped-formulation doc rewrite are a
+full phase of work. I stopped rather than start a production solver swap I could
+not finish, test and push in this turn. Nothing in production changed:
+`solver/linear.py` still serves every route.
+
 ## Phase 3 (first half) — prototype, benchmark, oracle
 
 Production is **not** changed: the candidate-placement model lives in

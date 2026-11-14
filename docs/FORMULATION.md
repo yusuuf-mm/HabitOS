@@ -6,6 +6,18 @@ makes contiguity structural instead of a post-hoc merge.
 
 Status: prototype only. Production still uses `solver/linear.py`.
 
+## Size limits
+
+- **25 active behaviours per plan.** Above that the solver refuses with a clear
+  message ("the planner accepts up to 25… deactivate some, or split the day")
+  instead of silently truncating or timing out.
+- **Duration step.** Each behaviour contributes at most 8 candidate lengths,
+  always including its minimum and maximum.
+- **Start alignment.** When a duration is a multiple of 30 minutes, candidate
+  starts are aligned to 30 minutes; an odd number of 15-minute periods keeps every
+  start, because aligning it would move the end off the half hour.
+- **Time limit** in the prototype: 30 s; the production worker keeps its own.
+
 ## Sets
 
 - `B` — behaviours eligible for the day (active, not already fully elapsed).
@@ -25,9 +37,9 @@ candidates, not 4 hours × 16 lengths.
 
 ## Constraints
 
-1. **At most one session per behaviour**: `Σ_{c ∈ C_b} y[c] + z[b] ≤ 1`.
-   With `z[b] = 0` this is `Σ y[c] = 1`; the objective decides whether dropping is
-   better than scheduling.
+1. **Scheduled or declined, never silent**: `Σ_{c ∈ C_b} y[c] + z[b] = 1`.
+   A slack "both zero" would let the model forget a behaviour, which is the one
+   outcome declines exist to prevent.
 2. **Period exclusivity**: for every period `t`, `Σ_{c ∋ t} y[c] ≤ 1`.
 3. **Protected tier first**: for protected behaviours, `Σ y[c] + z[b] = 1`
    (no silent skip). A protected conflict is reported with the smallest relaxation
@@ -57,6 +69,18 @@ the emitted schedule, not from the LP value:
 `decline_penalty` is `0` for flexible behaviours (declining is allowed and
 reported), and a large constant for protected ones so a decline is only ever a
 reported exception. No energy term: energy is dormant (Phase 1 decision).
+
+That penalised quantity is what the solver maximises, but it is **not** the value
+of the plan. The value reported to users is the placement value of the emitted
+sessions — the same `objective.py` definition Phase 1 introduced:
+
+```
+reported value = Σ emitted session minutes × impact × weight
+```
+
+The penalised LP value is kept in diagnostics under its own name
+(`solver_objective`), so a decline penalty can never leak into a user-facing
+number.
 
 ## Contiguity
 

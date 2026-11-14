@@ -106,3 +106,43 @@ def test_objective_is_the_emitted_schedule():
     result = solve([_behavior(lo=30, hi=30, window=(20, 40))], WEIGHTS)
     expected = sum(session.duration * 1.0 for session in result.sessions)
     assert result.objective == pytest.approx(expected)
+
+
+def test_solver_objective_is_reported_separately_from_plan_value():
+    """Decline penalties belong in diagnostics, never in the user-facing value."""
+    behaviors = [_behavior(f"b{i}", lo=60, hi=60, window=(20, 24), protected=True) for i in range(5)]
+    result = solve(behaviors, WEIGHTS)
+    assert result.declined, "this instance must decline some protected behaviours"
+    placement = sum(session.duration * 1.0 for session in result.sessions)
+    assert result.objective == pytest.approx(placement)
+    assert result.solver_objective is not None
+    assert result.solver_objective < result.objective, (
+        "the penalised value must carry the decline penalties the plan value excludes"
+    )
+
+
+def test_plans_above_the_cap_are_refused_not_truncated():
+    from candidate_model import MAX_BEHAVIORS, PlanTooLargeError
+
+    behaviors = [_behavior(f"b{i}") for i in range(MAX_BEHAVIORS + 1)]
+    with pytest.raises(PlanTooLargeError) as excinfo:
+        solve(behaviors, WEIGHTS)
+    assert str(MAX_BEHAVIORS) in str(excinfo.value)
+
+
+def test_duration_options_are_capped_and_keep_min_and_max():
+    from candidate_model import MAX_DURATION_OPTIONS, duration_options
+
+    behavior = _behavior(lo=15, hi=300)
+    options = duration_options(behavior)
+    assert len(options) <= MAX_DURATION_OPTIONS
+    assert options[0] * 15 == 15 and options[-1] * 15 == 300
+
+
+def test_30_minute_durations_start_on_the_half_hour():
+    from candidate_model import generate_candidates
+
+    behavior = _behavior(lo=30, hi=30, window=(20, 48))
+    for start, length in generate_candidates(behavior):
+        assert length % 2 == 0
+        assert start % 2 == 0, f"start {start} is not aligned to 30 minutes"

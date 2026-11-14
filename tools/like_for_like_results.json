@@ -1,0 +1,101 @@
+{
+  "rows": [
+    {
+      "instance": "10 fixed narrow",
+      "block_status": "optimal",
+      "block_objective": 75.21,
+      "candidate_status": "optimal",
+      "candidate_objective": 75.21,
+      "candidate_minus_block": 0.0
+    },
+    {
+      "instance": "10 fixed wide",
+      "block_status": "optimal",
+      "block_objective": 74.16,
+      "candidate_status": "optimal",
+      "candidate_objective": 74.16,
+      "candidate_minus_block": 0.0
+    },
+    {
+      "instance": "10 variable narrow",
+      "block_status": "optimal",
+      "block_objective": 159.9,
+      "candidate_status": "optimal",
+      "candidate_objective": 159.9,
+      "candidate_minus_block": 0.0
+    },
+    {
+      "instance": "10 variable wide",
+      "block_status": "optimal",
+      "block_objective": 333.48,
+      "candidate_status": "optimal",
+      "candidate_objective": 333.48,
+      "candidate_minus_block": 0.0
+    },
+    {
+      "instance": "20 fixed narrow",
+      "block_status": "optimal",
+      "block_objective": 155.94,
+      "candidate_status": "optimal",
+      "candidate_objective": 155.94,
+      "candidate_minus_block": 0.0
+    },
+    {
+      "instance": "20 fixed wide",
+      "block_status": "optimal",
+      "block_objective": 179.04,
+      "candidate_status": "optimal",
+      "candidate_objective": 179.04,
+      "candidate_minus_block": 0.0
+    },
+    {
+      "instance": "20 variable narrow",
+      "block_status": "InfeasibleProblemError",
+      "block_objective": null,
+      "candidate_status": "Infeasible",
+      "candidate_objective": null,
+      "candidate_minus_block": null
+    },
+    {
+      "instance": "20 variable wide",
+      "block_status": "optimal",
+      "block_objective": 624.75,
+      "candidate_status": "optimal",
+      "candidate_objective": 624.75,
+      "candidate_minus_block": 0.0
+    },
+    {
+      "instance": "40 fixed narrow",
+      "block_status": "InfeasibleProblemError",
+      "block_objective": null,
+      "candidate_status": "refused",
+      "candidate_objective": null,
+      "candidate_minus_block": null
+    },
+    {
+      "instance": "40 fixed wide",
+      "block_status": "optimal",
+      "block_objective": 318.15,
+      "candidate_status": "refused",
+      "candidate_objective": null,
+      "candidate_minus_block": null
+    },
+    {
+      "instance": "40 variable narrow",
+      "block_status": "InfeasibleProblemError",
+      "block_objective": null,
+      "candidate_status": "refused",
+      "candidate_objective": null,
+      "candidate_minus_block": null
+    },
+    {
+      "instance": "40 variable wide",
+      "block_status": "InfeasibleProblemError",
+      "block_objective": null,
+      "candidate_status": "refused",
+      "candidate_objective": null,
+      "candidate_minus_block": null
+    }
+  ],
+  "violations": []
+}
