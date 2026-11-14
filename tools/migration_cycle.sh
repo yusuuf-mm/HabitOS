@@ -1,26 +1,40 @@
 #!/usr/bin/env bash
-# One-off verification of the full Alembic cycle against a throwaway Postgres.
-# Requires: a throwaway Postgres container. Override BENCH_DATABASE_URL; the
-# default points at the disposable dev container used while writing this script.
+# One-off verification of the full Alembic cycle against a throwaway Postgres,
+# with seeded rows, through upgrade -> downgrade -> upgrade again.
+#
+# Runs unchanged locally and in CI's backend-migrations job: it only needs a
+# reachable Postgres in DATABASE_URL (or BENCH_DATABASE_URL), the backend
+# dependencies, and an empty database. It uses tools/pg_query.py instead of a
+# psql client so no additional tooling is required.
+#
+#   DATABASE_URL=postgresql+asyncpg://user:password@localhost:55433/behaviordb \
+#     bash tools/migration_cycle.sh
 set -uo pipefail
 
+if [ -z "${BENCH_DATABASE_URL:-}" ] && [ -n "${DATABASE_URL:-}" ]; then
+  BENCH_DATABASE_URL="$DATABASE_URL"
+fi
 export DATABASE_URL="${BENCH_DATABASE_URL:-postgresql+asyncpg://user:password@localhost:55433/behaviordb}"
+
 cd "$(dirname "$0")/../backend" || exit 1
+
+# `uv` on a developer machine, the installed console scripts in CI.
+if command -v uv >/dev/null 2>&1; then RUN="uv run"; else RUN=""; fi
 
 FAILED=0
 check() { # check <label> <actual> <expected>
   if [ "$2" = "$3" ]; then echo "  PASS  $1 = $2"; else echo "  FAIL  $1 = '$2' (expected '$3')"; FAILED=1; fi
 }
-q() { docker exec -i habitos-pg-test psql -tA -U user -d behaviordb -c "$1" 2>&1 | tr -d '\r'; }
+q() { $RUN python ../tools/pg_query.py "$1"; }
 fks() { q "select conrelid::regclass::text||':'||confdeltype::text from pg_constraint where contype='f' and confrelid='behaviors'::regclass order by 1;"; }
 counts() { echo "$(q 'select count(*) from behaviors')/$(q 'select count(*) from scheduled_behaviors')/$(q 'select count(*) from completion_logs')"; }
 
 echo "== STEP 1: upgrade to b96cd1f49448 =="
-uv run alembic upgrade b96cd1f49448 2>&1 | tail -3
+$RUN alembic upgrade b96cd1f49448 2>&1 | tail -3
 check "revision" "$(q 'select version_num from alembic_version')" "b96cd1f49448"
 
 echo "== STEP 2: seed legacy data (nonzero impact_on_*) =="
-docker exec -i habitos-pg-test psql -v ON_ERROR_STOP=1 -U user -d behaviordb <<'SQL' >/dev/null
+$RUN python ../tools/pg_query.py - <<'SQL'
 INSERT INTO users (id,email,username,password_hash,status,created_at,updated_at)
 VALUES ('11111111-1111-1111-1111-111111111111','hist@example.com','histuser','x','active',now(),now());
 INSERT INTO behaviors (id,user_id,name,category,min_duration,typical_duration,max_duration,
@@ -44,7 +58,7 @@ check "seeded rows (behaviors/scheduled/logs)" "$(counts)" "1/1/1"
 echo "  FKs before upgrade: $(fks | tr '\n' ' ')"
 
 echo "== STEP 3: upgrade head =="
-uv run alembic upgrade head 2>&1 | tail -4 || FAILED=1
+$RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "f2a3b4c5d6e7"
 check "history rows survive upgrade" "$(counts)" "1/1/1"
 echo "  objective_impacts rows:"
@@ -64,7 +78,7 @@ check "legacy completion linked to its session" "$(q "select count(*) from compl
 check "retired/released start empty" "$(q "select count(*) from scheduled_behaviors where retired_revision is not null or released_at is not null")" "0"
 
 echo "== STEP 4: downgrade past e1f2a3b4c5d6 =="
-uv run alembic downgrade d4e5f6a7b8c9 2>&1 | tail -3 || FAILED=1
+$RUN alembic downgrade d4e5f6a7b8c9 2>&1 | tail -3 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "d4e5f6a7b8c9"
 check "history rows survive e1f2 downgrade" "$(counts)" "1/1/1"
 echo "  FKs after e1f2 downgrade (c=CASCADE): $(fks | tr '\n' ' ')"
@@ -72,7 +86,7 @@ check "scheduled FK reverted to CASCADE" "$(q "select confdeltype from pg_constr
 check "completion FK reverted to CASCADE" "$(q "select confdeltype from pg_constraint where conrelid='completion_logs'::regclass and contype='f' and confrelid='behaviors'::regclass")" "c"
 
 echo "== STEP 5: downgrade past c1a2b3c4d5e6 =="
-uv run alembic downgrade b96cd1f49448 2>&1 | tail -3 || FAILED=1
+$RUN alembic downgrade b96cd1f49448 2>&1 | tail -3 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "b96cd1f49448"
 check "history rows survive c1 downgrade" "$(counts)" "1/1/1"
 echo "  restored legacy impacts: $(q "select impact_on_health||','||impact_on_productivity||','||impact_on_learning from behaviors")"
@@ -82,7 +96,7 @@ check "restored learning impact" "$(q "select impact_on_learning from behaviors"
 check "objective_impacts dropped" "$(q "select count(*) from information_schema.tables where table_name='objective_impacts'")" "0"
 
 echo "== STEP 6: upgrade head again =="
-uv run alembic upgrade head 2>&1 | tail -4 || FAILED=1
+$RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "f2a3b4c5d6e7"
 check "history rows survive second upgrade" "$(counts)" "1/1/1"
 check "objective_impacts count" "$(q 'select count(*) from objective_impacts')" "3"
@@ -91,7 +105,7 @@ echo "  FKs after second upgrade: $(fks | tr '\n' ' ')"
 check "scheduled FK RESTRICT again" "$(q "select confdeltype from pg_constraint where conrelid='scheduled_behaviors'::regclass and contype='f' and confrelid='behaviors'::regclass")" "r"
 
 echo "== STEP 7: downgrade the session snapshot revision =="
-uv run alembic downgrade e1f2a3b4c5d6 2>&1 | tail -3 || FAILED=1
+$RUN alembic downgrade e1f2a3b4c5d6 2>&1 | tail -3 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "e1f2a3b4c5d6"
 check "history rows survive snapshot downgrade" "$(counts)" "1/1/1"
 check "snapshot columns dropped" "$(q "select count(*) from information_schema.columns where table_name in ('scheduled_behaviors','optimization_runs','completion_logs') and column_name in ('planned_session_id','plan_revision','retired_revision','released_at','committed_at','baseline_revision')")" "0"
@@ -99,7 +113,7 @@ check "session id uniqueness constraint dropped" "$(q "select count(*) from pg_c
 check "completion FK dropped" "$(q "select count(*) from pg_constraint where conname='fk_completion_logs_planned_session_id'")" "0"
 
 echo "== STEP 8: upgrade head again (re-backfill) =="
-uv run alembic upgrade head 2>&1 | tail -4 || FAILED=1
+$RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "f2a3b4c5d6e7"
 check "history rows survive second snapshot upgrade" "$(counts)" "1/1/1"
 check "session ids re-created" "$(q "select count(*) from scheduled_behaviors where planned_session_id is not null")" "1"

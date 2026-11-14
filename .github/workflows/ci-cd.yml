@@ -212,6 +212,13 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      # Seeded-rows proof of the whole cycle (upgrade -> downgrade -> re-upgrade),
+      # including the session-snapshot backfill. Runs on the empty database,
+      # before the plain migration steps below.
+      - name: Prove migration cycle with seeded rows
+        working-directory: ./backend
+        run: bash ../tools/migration_cycle.sh
+
       - name: Upgrade to head
         working-directory: ./backend
         run: alembic upgrade head

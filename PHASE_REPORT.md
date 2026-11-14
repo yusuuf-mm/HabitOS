@@ -299,10 +299,33 @@ RESULT: ALL CHECKS PASSED
 detected"** — the models and the migration agree, which is what CI's drift job
 tests.
 
+### Identity is now tested, not just migrated
+
+`backend/tests_integration/test_session_identity.py` drives the real routes:
+
+- `test_replan_increments_plan_revision_on_run_and_sessions` — seeds revision 1,
+  calls `POST /api/v1/schedule/reoptimize`, then reads the database: the old run
+  is revision **1**, the new run is **2**, every session of the new run carries
+  **2**, and every `planned_session_id` in the day is non-null and distinct.
+- `test_completion_can_point_at_one_session` — the same behaviour scheduled twice
+  gets two different session ids; a completion naming the second resolves back to
+  exactly that session and not the first, which is the join `docs/METRIC.md` needs.
+
+### The cycle also runs in CI
+
+`tools/migration_cycle.sh` used `docker exec … psql` and assumed uv, so it could
+only run on one machine. It now reads `BENCH_DATABASE_URL` or `DATABASE_URL`, uses
+`tools/pg_query.py` (asyncpg) instead of a `psql` client, and picks `uv run` only
+where uv exists. CI's **Backend Migrations** job runs it first, on the empty
+service database, followed by the existing upgrade/downgrade/drift steps.
+
+Locally, after the refactor: **41 checks passed**, `RESULT: ALL CHECKS PASSED`.
+
 ### Real output
 
 ```
-backend:  67 passed, 1 skipped, 1 xpassed
+backend:  69 passed, 1 skipped, 1 xpassed in 29.30s
+backend:  tests_integration/test_session_identity.py: 2 passed in 3.20s
 frontend: 7 tests passed (4 files)
 frontend: npx tsc --noEmit exit 0
 frontend: npm run build exit 0 (built in 19.48s)
