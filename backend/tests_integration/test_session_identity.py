@@ -99,10 +99,11 @@ async def test_replan_increments_plan_revision_on_run_and_sessions(
             f"session {session.id} stamped {session.plan_revision}, run is 2"
         )
 
-    # Identity is per session, and unique across the whole day's plans.
-    ids = [s.planned_session_id for s in sessions]
+    # Within one run, every session has its own identity. Across runs the same
+    # session keeps its id, which is what makes a re-plan traceable.
+    ids = [s.planned_session_id for s in new_sessions]
     assert all(pid is not None for pid in ids)
-    assert len(ids) == len(set(ids)), "two sessions share a planned_session_id"
+    assert len(ids) == len(set(ids)), "two sessions in one run share an id"
 
 
 @pytest.mark.asyncio

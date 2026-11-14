@@ -23,7 +23,11 @@ export interface DashboardStats {
   totalBehaviors: number;
   activeBehaviors: number;
   totalOptimizationRuns: number;
-  completionRate: number;
+  // Null when the week had no baseline sessions to count against.
+  completionRate: number | null;
+  released: number;
+  systemDropped: number;
+  completionRateVsFeasible: number | null;
   averageScore: number;
   streakDays: number;
 }

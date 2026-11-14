@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.api.deps import get_db, get_current_active_user
+from app.services.metrics import compute_range, recent_days, user_zone
 from app.models import (
     User, 
     Behavior, 
@@ -90,32 +91,12 @@ async def get_dashboard_summary(
     )
     total_runs = total_runs_result.scalar() or 0
     
-    # Completion rate (last 7 days)
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    scheduled_result = await db.execute(
-        select(func.count(ScheduledBehavior.id))
-        .join(OptimizationRun)
-        .where(
-            and_(
-                OptimizationRun.user_id == current_user.id,
-                OptimizationRun.created_at >= seven_days_ago
-            )
-        )
+    # Completion rate over the last 7 days, from the baseline-anchored metric
+    # (docs/METRIC.md). The old query counted every scheduled row of every run, so
+    # each re-plan added a whole plan to the denominator.
+    week_metric = await compute_range(
+        db, current_user, recent_days(7, user_zone(current_user))
     )
-    total_scheduled = scheduled_result.scalar() or 0
-    
-    completed_result = await db.execute(
-        select(func.count(CompletionLog.id))
-        .where(
-            and_(
-                CompletionLog.user_id == current_user.id,
-                CompletionLog.completed_at >= seven_days_ago
-            )
-        )
-    )
-    total_completed = completed_result.scalar() or 0
-    
-    completion_rate = (total_completed / total_scheduled) if total_scheduled > 0 else 0.0
     
     # Average satisfaction score
     avg_score_result = await db.execute(
@@ -186,7 +167,18 @@ async def get_dashboard_summary(
                 total_behaviors=total_behaviors,
                 active_behaviors=active_behaviors,
                 total_optimization_runs=total_runs,
-                completion_rate=round(completion_rate, 2),
+                completion_rate=(
+                    round(week_metric.completion_rate, 4)
+                    if week_metric.completion_rate is not None
+                    else None
+                ),
+                released=week_metric.released,
+                system_dropped=week_metric.system_dropped,
+                completion_rate_vs_feasible=(
+                    round(week_metric.completion_rate_vs_feasible, 4)
+                    if week_metric.completion_rate_vs_feasible is not None
+                    else None
+                ),
                 average_score=round(avg_score_normalized, 2),
                 streak_days=streak_days,
             ),

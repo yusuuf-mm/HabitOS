@@ -12,7 +12,18 @@ class DashboardStats(BaseModel):
     totalBehaviors: int = Field(..., validation_alias="total_behaviors", serialization_alias="totalBehaviors")
     activeBehaviors: int = Field(..., validation_alias="active_behaviors", serialization_alias="activeBehaviors")
     totalOptimizationRuns: int = Field(..., validation_alias="total_optimization_runs", serialization_alias="totalOptimizationRuns")
-    completionRate: float = Field(..., validation_alias="completion_rate", serialization_alias="completionRate")
+    # Nullable: a week whose denominator is zero reports null, not 1.0 or 0.0
+    # (docs/METRIC.md §8).
+    completionRate: float | None = Field(None, validation_alias="completion_rate", serialization_alias="completionRate")
+    # Shown beside the rate: released sessions left the denominator, dropped ones
+    # stayed in it (docs/METRIC.md §1).
+    released: int = Field(0, validation_alias="released", serialization_alias="released")
+    systemDropped: int = Field(0, validation_alias="system_dropped", serialization_alias="systemDropped")
+    completionRateVsFeasible: float | None = Field(
+        None,
+        validation_alias="completion_rate_vs_feasible",
+        serialization_alias="completionRateVsFeasible",
+    )
     averageScore: float = Field(..., validation_alias="average_score", serialization_alias="averageScore")
     streakDays: int = Field(..., validation_alias="streak_days", serialization_alias="streakDays")
 

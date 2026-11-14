@@ -392,6 +392,30 @@ async def delete_behavior(
 
     behavior.is_active = False
     behavior.updated_at = datetime.now(timezone.utc)
+
+    # A session the user removes by deactivating its behaviour, before it starts,
+    # is a user release, not a planner failure (docs/METRIC.md §3.5). Sessions
+    # that already started are left exactly as they were.
+    from app.models.optimization import OptimizationRun, ScheduledBehavior
+    from app.services.metrics import local_today, session_start, user_zone
+
+    tz = user_zone(current_user)
+    now = datetime.now(timezone.utc)
+    today = local_today(tz)
+    upcoming = await db.execute(
+        select(ScheduledBehavior, OptimizationRun)
+        .join(OptimizationRun, ScheduledBehavior.optimization_run_id == OptimizationRun.id)
+        .where(
+            (ScheduledBehavior.behavior_id == behavior.id)
+            & (ScheduledBehavior.released_at.is_(None))
+            & (OptimizationRun.user_id == current_user.id)
+            & (OptimizationRun.end_date >= today)
+        )
+    )
+    for session, run in upcoming.all():
+        if now < session_start(run.start_date, session.time_period, tz):
+            session.released_at = now
+
     await db.commit()
 
     return ApiResponse(

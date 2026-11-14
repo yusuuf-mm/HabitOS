@@ -59,7 +59,7 @@ echo "  FKs before upgrade: $(fks | tr '\n' ' ')"
 
 echo "== STEP 3: upgrade head =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "f2a3b4c5d6e7"
+check "revision" "$(q 'select version_num from alembic_version')" "b3c4d5e6f7a8"
 check "history rows survive upgrade" "$(counts)" "1/1/1"
 echo "  objective_impacts rows:"
 q "select objective_type||'='||impact_score from objective_impacts order by objective_type;" | sed 's/^/    /'
@@ -97,28 +97,32 @@ check "objective_impacts dropped" "$(q "select count(*) from information_schema.
 
 echo "== STEP 6: upgrade head again =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "f2a3b4c5d6e7"
+check "revision" "$(q 'select version_num from alembic_version')" "b3c4d5e6f7a8"
 check "history rows survive second upgrade" "$(counts)" "1/1/1"
 check "objective_impacts count" "$(q 'select count(*) from objective_impacts')" "3"
 check "health impact" "$(q "select impact_score from objective_impacts where objective_type='HEALTH'")" "0.9"
 echo "  FKs after second upgrade: $(fks | tr '\n' ' ')"
 check "scheduled FK RESTRICT again" "$(q "select confdeltype from pg_constraint where conrelid='scheduled_behaviors'::regclass and contype='f' and confrelid='behaviors'::regclass")" "r"
 
-echo "== STEP 7: downgrade the session snapshot revision =="
-$RUN alembic downgrade e1f2a3b4c5d6 2>&1 | tail -3 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "e1f2a3b4c5d6"
-check "history rows survive snapshot downgrade" "$(counts)" "1/1/1"
-check "snapshot columns dropped" "$(q "select count(*) from information_schema.columns where table_name in ('scheduled_behaviors','optimization_runs','completion_logs') and column_name in ('planned_session_id','plan_revision','retired_revision','released_at','committed_at','baseline_revision')")" "0"
-check "session id uniqueness constraint dropped" "$(q "select count(*) from pg_constraint where conname='uq_scheduled_behaviors_planned_session_id'")" "0"
-check "completion FK dropped" "$(q "select count(*) from pg_constraint where conname='fk_completion_logs_planned_session_id'")" "0"
-
-echo "== STEP 8: upgrade head again (re-backfill) =="
-$RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
+echo "== STEP 7: downgrade the timezone / identity-constraint revision =="
+$RUN alembic downgrade f2a3b4c5d6e7 2>&1 | tail -3 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "f2a3b4c5d6e7"
-check "history rows survive second snapshot upgrade" "$(counts)" "1/1/1"
-check "session ids re-created" "$(q "select count(*) from scheduled_behaviors where planned_session_id is not null")" "1"
-check "session ids are unique" "$(q "select count(distinct planned_session_id) from scheduled_behaviors")" "$(q 'select count(*) from scheduled_behaviors')"
-check "completion re-linked" "$(q "select count(*) from completion_logs c join scheduled_behaviors s on s.planned_session_id=c.planned_session_id")" "1"
+check "history rows survive revision downgrade" "$(counts)" "1/1/1"
+check "users.timezone dropped" "$(q "select count(*) from information_schema.columns where table_name='users' and column_name='timezone'")" "0"
+check "per-revision identity constraint dropped" "$(q "select count(*) from pg_constraint where conname='uq_scheduled_behaviors_session_revision'")" "0"
+check "global identity constraint restored" "$(q "select count(*) from pg_constraint where conname='uq_scheduled_behaviors_planned_session_id'")" "1"
+check "completion FK restored" "$(q "select count(*) from pg_constraint where conname='fk_completion_logs_planned_session_id'")" "1"
+
+echo "== STEP 8: upgrade head again =="
+$RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
+check "revision" "$(q 'select version_num from alembic_version')" "b3c4d5e6f7a8"
+check "history rows survive second upgrade" "$(counts)" "1/1/1"
+check "existing users default to UTC" "$(q "select timezone from users limit 1")" "UTC"
+check "per-revision identity constraint in place" "$(q "select count(*) from pg_constraint where conname='uq_scheduled_behaviors_session_revision'")" "1"
+check "global identity constraint gone" "$(q "select count(*) from pg_constraint where conname='uq_scheduled_behaviors_planned_session_id'")" "0"
+check "completion FK gone" "$(q "select count(*) from pg_constraint where conname='fk_completion_logs_planned_session_id'")" "0"
+check "session ids preserved" "$(q "select count(*) from scheduled_behaviors where planned_session_id is not null")" "1"
+check "completion still linked" "$(q "select count(*) from completion_logs c join scheduled_behaviors s on s.planned_session_id=c.planned_session_id")" "1"
 
 echo
 if [ "$FAILED" -eq 0 ]; then echo "RESULT: ALL CHECKS PASSED"; else echo "RESULT: FAILURES PRESENT"; fi

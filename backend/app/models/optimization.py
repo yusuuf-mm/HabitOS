@@ -112,7 +112,11 @@ class ScheduledBehavior(Base):
     __table_args__ = (
         Index("idx_scheduled_behaviors_optimization_run_id", "optimization_run_id"),
         Index("idx_scheduled_behaviors_behavior_id", "behavior_id"),
+        # Identity is stable across revisions, so the same session id appears once
+        # per revision. Global uniqueness would forbid carrying a session forward.
         UniqueConstraint(
-            "planned_session_id", name="uq_scheduled_behaviors_planned_session_id"
+            "planned_session_id",
+            "optimization_run_id",
+            name="uq_scheduled_behaviors_session_revision",
         ),
     )

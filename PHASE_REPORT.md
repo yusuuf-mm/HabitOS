@@ -345,6 +345,127 @@ frontend: npm run build exit 0 (built in 19.48s)
   show one linked session; the older data cannot say which, so it is left
   unlinked rather than guessed.
 
+## Phase 2.5 — Making the metric real
+
+### The definition first, amended in place
+
+`docs/METRIC.md` v1 was amended before any code used it: the baseline stays open
+until the later of the first session starting or 05:00 plan-local; runs before
+that are drafts, not re-plans, and create no dropped sessions. The known-tension
+section says plainly that a re-plan can only lower the strict rate, that the UI
+shows `completion_rate_vs_feasible` beside it, and that the strict rate stays the
+headline. Deactivating a behaviour before a session starts is a user release.
+Late completions (any time before the local day ends) count and are flagged.
+Timezones are stored on `users.timezone` and used for every boundary.
+Multi-day rates are summed counts, never averaged percentages.
+
+Because the query and the commit endpoint were written after the amendments in
+this same phase, there was nothing to retrofit; the doc, the service and the
+tests were written together and agree.
+
+### One module decides the number
+
+`backend/app/services/metrics.py` resolves the day's baseline plan, classifies
+each session (`completed` / `released_by_user` / `dropped_by_system` / `missed`)
+from timestamps only, and computes:
+
+```
+completion_rate             = completed / (|C| - released)
+released_ratio              = released / |C|
+completion_rate_vs_feasible = completed / (|C| - released - dropped_by_system)
+```
+
+`null` whenever the denominator is zero. `compute_range` sums counts across days
+(`docs/METRIC.md` §7). The dashboard's `completionRate` now comes from it. The old
+query counted every `scheduled_behaviors` row of every run created in the last 7
+days, so each re-plan added a whole plan to the denominator — the inflation this
+phase was asked to remove.
+
+### Sessions: release, retirement, identity
+
+- `POST /api/v1/schedule/{id}/release` sets `released_at`, but only before the
+  session starts (409 afterwards: it can only be missed). Releasing removes it
+  from the denominator and reports it beside the rate.
+- A re-plan of a **frozen** baseline writes `retired_revision` on every session it
+  drops and carries `planned_session_id` forward for every session it keeps, even
+  when the session moved. Nothing is deleted or renumbered.
+- A re-plan before the baseline freezes is a draft: revision 1, no retirement.
+- Deactivating a behaviour releases that behaviour's not-yet-started sessions
+  (`docs/METRIC.md` §3.5) instead of dropping them.
+- `mark_complete` now records `planned_session_id`, so a completion names one
+  session.
+
+**Schema correction found while testing:** global uniqueness on
+`planned_session_id` made carrying a session into the next revision impossible
+(`UNIQUE constraint failed`). Identity is now unique per
+`(planned_session_id, optimization_run_id)`, and the completion FK was dropped
+because the same id legitimately exists once per revision. Migration
+`b3c4d5e6f7a8` adds `users.timezone` and performs that swap, with a downgrade that
+restores the old constraint and FK.
+
+### Several optimization runs on the same day
+
+- **Before the freeze:** every run is a draft at revision 1 and retires nothing.
+  `POST /schedule/commit` accepts the latest run (or an explicit `run_id`),
+  clearing `baseline_revision` on the others, so exactly one baseline exists per
+  day. Committing repeatedly is idempotent while open.
+- **After the freeze:** the baseline cannot be re-committed (409). A re-plan
+  becomes revision N+1, retires what it drops and keeps the rest's identities.
+- A `/optimization/solve` run after the baseline is frozen creates a revision-1
+  run that is *not* the baseline; its sessions are excluded from the rate. Only
+  `reoptimize` advances a frozen day. (Recorded here so it is a decision, not an
+  accident.)
+
+### Tests (contract only)
+
+`backend/tests_integration/test_metric.py` — 12 tests: rate = completed /
+(baseline − released); a dropped session stays in the denominator and is reported
+separately; zero denominator returns `null` not `1.0`; a late completion counts
+and is flagged; a completion after the local day ends does not count; drafts are
+`open` until the later of 05:00 or the first session start; multi-day is summed
+(1/1 + 1/10 = 2/11); the timezone shifts the day boundary (skipped on machines
+without a tz database, e.g. this Windows Python); release removes a session from
+the denominator; exactly one baseline per day; a re-plan never shrinks `|C|`; a
+carried session keeps its `planned_session_id`.
+
+**Real output**
+
+```
+backend:  80 passed, 2 skipped, 1 xpassed in 70.69s
+metric + identity: 13 passed, 1 skipped
+frontend: 7 tests passed (4 files), tsc --noEmit clean
+```
+
+### Frontend
+
+The dashboard card shows the rate with its two small numbers, e.g.
+`55%` and `2 released · 3 dropped`, and `—` when the denominator is zero.
+
+### KI-001 (the subset-test hang) — still open
+
+Re-ran the documented reproduction after the daemon-thread pool and `threading.Lock`
+change:
+
+```
+uv run pytest tests_integration/test_solver_math.py tests_integration/test_behavior_updates.py -q
+-> 2 passed in 4.76s, then the process did not exit (killed at 120 s)
+```
+
+So the event-loop lock change did **not** fix it; the pool is not the cause. It
+stays in `KNOWN_ISSUES.md`, now with this evidence.
+
+### H9 defect status
+
+| Defect | Status |
+|---|---|
+| Duplicate entries in a re-plan problem | **Fixed** in Phase 1.5 — one problem entry per behaviour. |
+| Frozen periods never actually frozen | **Fixed** in Phase 1.5 — pinned by constraints, not `LpVariable` bounds, which PuLP resets for `Binary`. |
+| Global cutoff (server clock, whole-plan elapsed) | **Fixed here** — current period is computed in the user's plan-local clock and adjusted by the target date, so a past day is fully elapsed and a future day is fully ahead. |
+| Timezone | **Fixed here** — `users.timezone` (IANA, default UTC) drives the day boundary, the 05:00 baseline hour, the local day end for late completions and current-period checks. |
+
+Phase 4 should not redo any of these; what remains for it is the per-session
+re-solve behaviour and the release/retire UI.
+
 ## Phase 3 — The planner itself
 
 Not started.

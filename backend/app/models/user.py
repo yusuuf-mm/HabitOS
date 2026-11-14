@@ -28,6 +28,10 @@ class User(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     last_login: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    # IANA name used for the plan-local day boundary (docs/METRIC.md §5).
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="UTC", server_default="UTC"
+    )
 
     @property
     def name(self) -> str:

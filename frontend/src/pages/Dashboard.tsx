@@ -63,8 +63,12 @@ export default function Dashboard() {
     },
     {
       title: "Completion Rate",
-      value: `${(summary.stats.completionRate * 100).toFixed(0)}%`,
-      subtitle: "This week",
+      value:
+        summary.stats.completionRate === null
+          ? "—"
+          : `${(summary.stats.completionRate * 100).toFixed(0)}%`,
+      subtitle: `${summary.stats.released} released · ${summary.stats.systemDropped} dropped`,
+
       icon: CheckCircle2,
       trend: "up" as const,
       trendValue: "+5%",

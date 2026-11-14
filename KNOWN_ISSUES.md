@@ -2,7 +2,10 @@
 
 ## KI-001: Some integration-test subsets hang instead of finishing
 
-**Status:** open — reproduced, not fixed.
+**Status:** open — reproduced, not fixed. Re-checked 2026-11-14 after the solver
+pool moved to daemon threads with a `threading.Lock`: the reproduction below still
+prints `2 passed in 4.76s` and then fails to exit (killed at 120 s). The pool is
+therefore not the cause; the hang happens after the summary is printed.
 
 **Reproduction (from `backend/`):**
 
