@@ -69,10 +69,17 @@ def _ensure_workers() -> None:
             _workers.append(thread)
 
 
-def _try_acquire_slot() -> bool:
+def _try_acquire_slot(low_priority: bool = False) -> bool:
+    """Take a slot, or refuse.
+
+    ``low_priority`` is used by what-if solves: they refuse while a slot must be
+    kept free for a normal plan, so asking "what would it cost to fit X" can
+    never make the day's real solve wait.
+    """
     global _active
+    limit = MAX_SOLVER_WORKERS - 1 if low_priority else MAX_SOLVER_WORKERS
     with _state_lock:
-        if _active >= MAX_SOLVER_WORKERS:
+        if _active >= limit:
             return False
         _active += 1
         return True
@@ -94,6 +101,7 @@ async def run_in_solver_pool(
     fn: Callable[..., T],
     *args: Any,
     timeout_seconds: float,
+    low_priority: bool = False,
     **kwargs: Any,
 ) -> T:
     """Run a blocking solve in the bounded pool, bounded by *timeout_seconds*.
@@ -101,14 +109,16 @@ async def run_in_solver_pool(
     Raises :class:`SolverBusyError` immediately when no worker is free, and
     :class:`SolverTimeoutError` when the solve outlives its limit.
     """
-    if not _try_acquire_slot():
-        raise SolverBusyError(
-            "Solver is busy",
-            detail=(
+    if not _try_acquire_slot(low_priority=low_priority):
+        detail = (
+            "a solver worker is being kept free for a normal plan; retry in a moment"
+            if low_priority
+            else (
                 f"{MAX_SOLVER_WORKERS} of {MAX_SOLVER_WORKERS} solver workers are "
                 "in use; retry in a moment"
-            ),
+            )
         )
+        raise SolverBusyError("Solver is busy", detail=detail)
 
     _ensure_workers()
     try:

@@ -8,6 +8,12 @@ from app.models.behavior import BehaviorCategory, TimeSlot
 from app.core.constants import longest_contiguous_minutes_for_time_slots
 
 
+class ObjectiveWeightUpdate(BaseModel):
+    """A new weight for one objective; the set is renormalised on write."""
+
+    weight: float = Field(..., ge=0.0, le=100.0)
+
+
 class ObjectiveImpactCreate(BaseModel):
     """Behavior impact creation schema."""
 

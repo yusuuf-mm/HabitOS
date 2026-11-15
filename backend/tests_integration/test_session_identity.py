@@ -10,6 +10,17 @@ from uuid import UUID
 import pytest
 from httpx import AsyncClient
 
+def _plan_day():
+    """The plan-local day (UTC by default), the clock the schedule routes use.
+
+    `date.today()` is the server's local day, which can already be tomorrow while
+    the user's day is still running; runs dated with it would not be found by a
+    route that asks for today on the user's clock.
+    """
+    return datetime.now(timezone.utc).date()
+
+
+
 
 async def _get_user_id(client: AsyncClient) -> UUID:
     """Extract the user ID from the JWT in the client headers."""
@@ -51,8 +62,8 @@ async def test_replan_increments_plan_revision_on_run_and_sessions(
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
         results={"objective_contributions": {"health": {"contribution": 27.0, "weight": 1.0}}},
         total_objective_value=27.0,
@@ -134,8 +145,8 @@ async def test_completion_can_point_at_one_session(auth_client: AsyncClient, db_
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
     )
     db_session.add(run)

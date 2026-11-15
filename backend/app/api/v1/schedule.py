@@ -377,13 +377,18 @@ async def partial_reoptimize(
     from app.core.exceptions import SolverBusyError
     from app.optimization import (
         BehaviorScheduleInput,
+        CandidateSolver,
         ConstraintInput,
-        LinearSolver,
         OptimizationProblem,
+        normalise_weights,
+        record_weights,
         run_in_solver_pool,
     )
 
-    target_date = date.today()
+    # "Today" is the plan-local day, the same clock the metric uses: the server's
+    # date can already be tomorrow while the user's day is still running.
+    tz = user_zone(current_user)
+    target_date = local_today(tz)
 
     # 1. Find active run
     run_result = await db.execute(
@@ -401,7 +406,6 @@ async def partial_reoptimize(
     # 2. Determine the current period in the user's plan-local clock, not the
     # server's UTC clock (docs/METRIC.md §5), and honour the target date: a past
     # day is entirely elapsed, a future day is entirely ahead.
-    tz = user_zone(current_user)
     now_local = datetime.now(timezone.utc).astimezone(tz)
     current_period = (now_local.hour * 60 + now_local.minute) // 15
     day_offset = (target_date - local_today(tz)).days
@@ -453,10 +457,13 @@ async def partial_reoptimize(
         sa_select(Objective).where(Objective.user_id == current_user.id)
     )
     objectives_db = obj_result.scalars().all()
-    objectives = {
+    raw_weights = {
         o.type.value if hasattr(o.type, "value") else str(o.type): o.weight
         for o in objectives_db
     }
+    # One normalised distribution reaches the solver; the raw weights are kept
+    # for the plan's audit record (docs/FORMULATION.md).
+    objectives = normalise_weights(raw_weights)
 
     con_result = await db.execute(
         sa_select(Constraint).where(
@@ -500,7 +507,7 @@ async def partial_reoptimize(
 
     # 6. Solve
     new_run_id = _uuid4()
-    solver = LinearSolver(timeout_seconds=30)
+    solver = CandidateSolver(timeout_seconds=30)
     solution = await run_in_solver_pool(
         solver.solve_partial_day,
         problem,
@@ -534,13 +541,17 @@ async def partial_reoptimize(
         id=new_run_id,
         user_id=current_user.id,
         status="completed" if solution.status == "optimal" else "feasible",
+        # Coarse enum column; the formulation itself is in diagnostics/results.
         solver="linear",
         start_date=target_date,
         end_date=target_date,
         time_periods=PERIODS_PER_DAY,
         total_objective_value=solution.total_objective_value,
         results=solution.to_dict(),
-        diagnostics=solution.diagnostics,
+        diagnostics={
+            **(solution.diagnostics or {}),
+            "objective_weights": record_weights(raw_weights),
+        },
         plan_revision=revision,
     )
     db.add(new_run)

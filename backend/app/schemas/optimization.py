@@ -100,6 +100,45 @@ from .schedule import DailySchedule
 OptimizationResult.update_forward_refs()
 
 
+class ForcedIncludeRequest(BaseModel):
+    """Which behaviours to force into the day."""
+
+    targetDate: Optional[date] = None
+    behaviorIds: List[UUID] = Field(default_factory=list)
+
+
+class ForcedSession(BaseModel):
+    """A session the forced-include solve placed."""
+
+    behaviorId: UUID
+    behaviorName: str
+    startTime: str
+    endTime: str
+    duration: int
+
+
+class DisplacedSession(BaseModel):
+    """A session that had to give way to fit the requested behaviours."""
+
+    behaviorId: UUID
+    behaviorName: str
+    reason: str
+    minutes: int
+
+
+class ForcedIncludeResult(BaseModel):
+    """The cost of fitting the requested behaviours into the day."""
+
+    fits: bool
+    forced: List[ForcedSession] = Field(default_factory=list)
+    displaced: List[DisplacedSession] = Field(default_factory=list)
+    relaxations: List[Dict[str, Any]] = Field(default_factory=list)
+    objectiveChange: float = 0.0
+    solverObjective: Optional[float] = None
+    seconds: float = 0.0
+    reason: Optional[str] = None
+
+
 class InfeasibilityDiagnostics(BaseModel):
     """Infeasibility diagnostics."""
 

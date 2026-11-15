@@ -7,6 +7,17 @@ from uuid import UUID
 import pytest
 from httpx import AsyncClient
 
+def _plan_day():
+    """The plan-local day (UTC by default), the clock the schedule routes use.
+
+    `date.today()` is the server's local day, which can already be tomorrow while
+    the user's day is still running; runs dated with it would not be found by a
+    route that asks for today on the user's clock.
+    """
+    return datetime.now(timezone.utc).date()
+
+
+
 
 # ---------------------------------------------------------------------------
 # WS broadcast test — verifies the manager's method is called by patching it.
@@ -40,8 +51,8 @@ async def test_broadcast_called_on_complete(auth_client: AsyncClient, db_session
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
         results={"objective_contributions": {"health": {"contribution": 15.0, "weight": 1.0}}},
         total_objective_value=15.0,
@@ -96,8 +107,8 @@ async def test_broadcast_called_on_incomplete(auth_client: AsyncClient, db_sessi
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
         results={"objective_contributions": {"mind": {"contribution": 24.0, "weight": 1.0}}},
         total_objective_value=24.0,
@@ -164,8 +175,8 @@ async def test_partial_reoptimize_returns_new_run(auth_client: AsyncClient, db_s
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
         results={"objective_contributions": {"health": {"contribution": 60.0, "weight": 1.0}}},
         total_objective_value=60.0,

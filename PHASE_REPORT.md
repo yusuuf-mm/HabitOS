@@ -575,13 +575,54 @@ passes the production `validate_schedule`; the 12–16-period instances cannot b
 expressed in its named-slot model without distorting them, which is why both
 validators are reported.
 
-### Not attempted: steps 8–11
+### Steps 8-11 — shipped
 
-The gate passed, but replacing the production formulation, the forced-include
-endpoint, editable objective weights and the shipped-formulation doc rewrite are a
-full phase of work. I stopped rather than start a production solver swap I could
-not finish, test and push in this turn. Nothing in production changed:
-`solver/linear.py` still serves every route.
+**8. Production formulation replaced behind the same contract.**
+`app/optimization/solvers/candidate.py` (`CandidateSolver`) is what every route,
+the re-plan and the MCP tool now build. It keeps `solve(problem, run_id) ->
+OptimizationSolution`, `solve_partial_day` for frozen periods, the
+`validate_schedule` gate before a plan is returned, the shared `objective.py`
+value, and the bounded worker pool. The block solver stays as the reference the
+gate compared against; nothing builds it. All contract, frozen-period and the
+eight candidate tests pass unedited; 13 new production tests in
+`tests/test_candidate_solver.py` assert the same promises against the shipped
+class, plus the cap, the duration step, the alignment, the forced solve and the
+separate `solver_objective`.
+
+Production mapping the prototype did not have: canonical time slots become
+contiguous windows, frozen minutes count towards duration bounds and are
+re-emitted unchanged, `time_budget` and `frequency` constraints are honoured, and
+`validate_schedule` runs on the merged item list. The coarse `solver` column stays
+`linear` (it is a pre-existing enum); the formulation is recorded in
+`diagnostics.formulation` and `results.solver`.
+
+Two bugs the swap exposed and this commit fixes: re-plan used the server's
+`date.today()` instead of the plan-local day, so a re-plan just after midnight
+local found no active run; and `optimization_runs` could not store the solver name
+(the column is an enum), which is why the formulation is recorded in diagnostics.
+
+**9. Forced include.** `POST /api/v1/optimization/forced-include` takes
+`behaviorIds` and a target date, runs a baseline solve and a forced solve on the
+same problem, and returns the forced sessions, the displaced sessions with reasons
+and minutes, the objective change, the relaxations (displaced, shortened, or
+`no_free_window`), and the penalised value for diagnostics. Both solves use the
+same worker pool at **lower priority**: a what-if call refuses while it would take
+the last worker, so it can never make a real solve wait. Nothing is persisted.
+
+**10. Editable weights.** `GET /api/v1/behaviors/objectives` now returns the
+normalised `weight`; `PUT /api/v1/behaviors/objectives/{id}` sets one weight and
+renormalises the whole set to sum to 1 (all-zero falls back to an equal split).
+`_load_problem` normalises once, and every plan records
+`diagnostics.objective_weights = {raw, normalised}` — verified by
+`test_plan_records_the_weights_it_used`.
+
+**11. Docs.** `docs/FORMULATION.md` is rewritten for the shipped model: size
+limits, sets, the exact constraints (including the `selected + z` pair), the
+objective split, weights, decline reasons, forced include, the diagnostics
+contract, and the gate evidence. `docs/METRIC.md` is unchanged.
+
+New tests: `tests/test_candidate_solver.py` (13) and
+`tests_integration/test_forced_include.py` (5).
 
 ## Phase 3 (first half) — prototype, benchmark, oracle
 
