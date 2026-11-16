@@ -845,6 +845,54 @@ confirmation notice.
 `screenshots/phase4-declines.png` (forced-include cost answer visible),
 `screenshots/phase4-replan-diff.png` and `screenshots/phase4-weights-editor.png`.
 
+### Audit fixes — misleading optimization-page numbers (2026-11-17)
+
+Four confirmed display findings and one infrastructure failure, fixed in small
+commits. The solver itself was not changed.
+
+- **1250% objective progress** (commit `e313323`): the analytics API sent
+  `round(weight * 100, 1)` and the panel multiplied by 100 again, so a 0.125
+  weight displayed as 1250% under the heading "Objective Progress". The
+  backend now sends the normalised 0-1 weight (`normalise_weights`, so the
+  shares sum to 1.0) and the frontend renders it once. The schema docstring and
+  the new "Objective Weights" heading state what the number is; the per-row
+  trend icons remain but are documented as a hardcoded `"stable"`, not a
+  measured trend. Verified live after reconnecting the database: the API
+  returns `progress: 0.125` for each of the eight objectives.
+- **NaN% completion rate** (commit `688dd2a`): the panel divided the summed
+  daily completion rates by `behaviorCompletions.length`. With no rows that is
+  a division by zero and the header rendered `NaN%`. The average is now `null`
+  with no data and the header shows "—", matching the dashboard's convention.
+- **Total Score as a percentage** (commit `5b43e3a`): `totalScore` is the
+  solver's raw objective value — weighted impact points × minutes, no scaling
+  (`objective.py` states the units) — but the run panel and History multiplied
+  it by 100 and rendered it as a percentage with a progress bar. It is now
+  "Total Objective Value" in `pts·min` with a caption saying it compares
+  between runs of the same day and is not a percentage; the normalised
+  contributions list below remains the real percentage breakdown.
+- **Fake constraints-satisfied count** (commit `5b43e3a`):
+  `map_run_to_response` sets both `constraints_satisfied` and
+  `constraints_total` to `len(scheduled_behaviors)` with `# Simplified`
+  comments, so the panel's "Constraints Satisfied X / Y" could never disagree.
+  The panel and History now show "Sessions Scheduled" with the real session
+  count (the mapper always fetches the behaviours, including for history). The
+  backend fields stay in the API for compatibility but are no longer displayed;
+  a real constraint count remains future work.
+- **Backend database reconnected** (no commit; gitignored `backend/.env`):
+  the old `postgres-db` container published no host port, so the host backend
+  fell back to a default `user` role that does not exist (`FATAL: role "user"
+  does not exist`) and health reported `database: unavailable` — that, not
+  solver code, is why optimization calls failed. The container was recreated
+  from the local `postgres:15-alpine` image with `5432` published to the host,
+  and `backend/.env` points `DATABASE_URL` at it. Health now reports
+  `database: connected`, and a live solve for `demo@example.com` (one behavior,
+  "Morning Run") returned `solverStatus: optimal` with a persisted run;
+  scheduled 07:30-08:00.
+
+Also re-verified with the backend restarted on the fixed code: analytics
+returns `progress` as a 0-1 fraction (0.125 each, sum 1.0) and an empty
+`behaviorCompletions` list now maps to the em dash, not NaN%.
+
 ---
 
 ## Needs a decision
