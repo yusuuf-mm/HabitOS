@@ -761,10 +761,13 @@ integration conftest now freezes "now" at 2026-06-08 12:00 UTC, with
 `candidate` to `linear`). Both write paths record `candidate`; the solver
 variant stays in results/diagnostics.
 
-**Not proven:** the Docker daemon is not running on this machine, so
-`tools/migration_cycle.sh` could not run against the local `postgres:15-alpine`
-image in this phase. The migration files and the script's new head are
-committed, but upgrade/downgrade on Postgres is unverified here.
+**Proven where it could run:** the local Docker daemon is not running on this
+machine, so `tools/migration_cycle.sh` was not run locally. The same script,
+extended in this phase to check `is_protected` and the new enum value and to
+downgrade through it, runs in the `Backend Migrations` CI job on
+`postgres:15-alpine`, followed by `alembic downgrade base`, `upgrade head` and
+`alembic check`; that job is green on `c39914a`. Local upgrade/downgrade is
+therefore still unexercised on this machine.
 
 ### Step B — docs/ITEMS.md
 
@@ -797,9 +800,12 @@ as data (no scheduler yet), and the AI helper producing a validated
 Checks: frontend `tsc --noEmit` clean, `npm test` 17 passed (10 new),
 `npm run build` succeeds; backend full suite 121 passed, 1 skipped, 1 xpassed.
 
-**Not done:** no browser session was available for this phase, so the screens
-above were not exercised in a real browser and no before/after screenshots were
-taken.
+**Screens:** the landing page was opened in the real browser
+(`screenshots/phase4-landing-hero.png`); the hero grid is the generated day.
+The authenticated screens (re-plan, declines, release/commit, weights) were
+not opened in a browser: the app needs Postgres, and the local Docker engine is
+down, so there was no backend to sign into. They are covered by component tests
+only, and no before/after screenshots of them exist.
 
 ---
 
