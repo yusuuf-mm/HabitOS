@@ -20,11 +20,14 @@ export function AnalyticsPanel({ data }: AnalyticsPanelProps) {
     stable: "text-muted-foreground",
   };
 
-  // Calculate average completion rate
+  // Calculate average completion rate. Null when there is no data so the
+  // UI shows an empty state instead of NaN%.
   const avgCompletionRate =
-    data.behaviorCompletions.reduce((acc, day) => {
-      return acc + (day.scheduled > 0 ? day.completed / day.scheduled : 0);
-    }, 0) / data.behaviorCompletions.length;
+    data.behaviorCompletions.length > 0
+      ? data.behaviorCompletions.reduce((acc, day) => {
+          return acc + (day.scheduled > 0 ? day.completed / day.scheduled : 0);
+        }, 0) / data.behaviorCompletions.length
+      : null;
 
   return (
     <div className="space-y-6">
@@ -33,7 +36,9 @@ export function AnalyticsPanel({ data }: AnalyticsPanelProps) {
         <div className="flex items-center justify-between">
           <h3 className="font-medium text-foreground">Completion Rate</h3>
           <span className="text-2xl font-semibold text-accent">
-            {(avgCompletionRate * 100).toFixed(0)}%
+            {avgCompletionRate === null
+              ? "—"
+              : `${(avgCompletionRate * 100).toFixed(0)}%`}
           </span>
         </div>
 
@@ -59,9 +64,9 @@ export function AnalyticsPanel({ data }: AnalyticsPanelProps) {
         </div>
       </div>
 
-      {/* Objective Progress */}
+      {/* Objective Weights */}
       <div className="dashboard-card space-y-4">
-        <h3 className="font-medium text-foreground">Objective Progress</h3>
+        <h3 className="font-medium text-foreground">Objective Weights</h3>
 
         <div className="space-y-4">
           {data.objectiveProgress.map((obj) => {
