@@ -2,10 +2,17 @@ import { useEffect, useState } from "react";
 import { Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/services/apiClient";
+import { roundedPercentages } from "@/lib/percentage";
 import type { Objective } from "@/types";
 
 interface ObjectiveWithWeight extends Objective {
   weight?: number;
+}
+
+/** Draft integers that always sum to 100, even for shares like 0.125. */
+function draftFrom(items: ObjectiveWithWeight[]): Record<string, number> {
+  const percentages = roundedPercentages(items.map((item) => item.weight ?? 0));
+  return Object.fromEntries(items.map((item, index) => [item.id, percentages[index]]));
 }
 
 export function WeightsEditor() {
@@ -20,11 +27,7 @@ export function WeightsEditor() {
       .then((response) => {
         const items = response.data as ObjectiveWithWeight[];
         setObjectives(items);
-        setDraft(
-          Object.fromEntries(
-            items.map((objective) => [objective.id, Math.round((objective.weight ?? 0) * 100)]),
-          ),
-        );
+        setDraft(draftFrom(items));
       })
       .catch(() => setMessage("Weights could not be loaded."));
   }, []);
@@ -38,11 +41,7 @@ export function WeightsEditor() {
       );
       const items = response.data as ObjectiveWithWeight[];
       setObjectives(items);
-      setDraft(
-        Object.fromEntries(
-          items.map((objective) => [objective.id, Math.round((objective.weight ?? 0) * 100)]),
-        ),
-      );
+      setDraft(draftFrom(items));
       setMessage("Saved. The planner rescaled the rest so the weights still add up to 100%.");
     } catch {
       setMessage("That weight could not be saved; the old one still applies.");

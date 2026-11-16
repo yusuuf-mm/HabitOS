@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PlanTools } from "@/components/PlanTools";
 import { WeightsEditor } from "@/components/WeightsEditor";
+import { roundedPercentages } from "@/lib/percentage";
 import { summariseChanges } from "@/lib/planDiff";
 import { declineSentence, declineSummary, relaxationSentence } from "@/lib/declines";
 import type { DailySchedule } from "@/types";
@@ -228,5 +229,33 @@ describe("WeightsEditor", () => {
 
     await waitFor(() => expect(updateObjectiveWeight).toHaveBeenCalledWith("o-1", 0.75));
     expect(await screen.findByText(/rescaled the rest/i)).toBeInTheDocument();
+  });
+
+  it("shows eighths as percentages that add up to 100, not 104", async () => {
+    // Eight objectives at exactly 1/8 each: naive rounding shows 13% apiece
+    // and a draft total of 104% even though the stored weights are exact.
+    getObjectives.mockResolvedValue({
+      data: Array.from({ length: 8 }, (_, i) => ({
+        id: `o-${i}`,
+        name: `objective-${i}`,
+        weight: 0.125,
+      })),
+    });
+
+    render(<WeightsEditor />);
+
+    expect(await screen.findByText(/Current draft totals 100%/)).toBeInTheDocument();
+    expect(screen.getAllByText("13%")).toHaveLength(4);
+    expect(screen.getAllByText("12%")).toHaveLength(4);
+  });
+});
+
+describe("roundedPercentages", () => {
+  it("keeps the displayed integers summing to 100", () => {
+    expect(roundedPercentages([0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125]))
+      .toEqual([13, 13, 13, 13, 12, 12, 12, 12]);
+    expect(roundedPercentages([0.5, 0.5])).toEqual([50, 50]);
+    expect(roundedPercentages([1 / 3, 1 / 3, 1 / 3])).toEqual([34, 33, 33]);
+    expect(roundedPercentages([])).toEqual([]);
   });
 });
