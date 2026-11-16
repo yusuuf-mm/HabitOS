@@ -23,6 +23,7 @@ from app.schemas.api import ApiResponse
 from app.schemas.analytics import DashboardSummary, DashboardStats, AnalyticsData, BehaviorCompletion, ObjectiveProgress, CategoryDistribution, DashboardScheduledBehavior, DashboardBehavior
 from app.schemas.optimization import OptimizationSummary, ScheduledBehaviorResponse
 from app.api.v1.behaviors import map_behavior_to_response
+from app.optimization.weights import normalise_weights
 
 logger = logging.getLogger(__name__)
 
@@ -319,18 +320,27 @@ async def get_analytics(
         for row in categories
     ]
     
-    # Objective progress (simplified - showing average impact scores)
+    # Objective weights: each objective's configured share of the
+    # optimisation objective (a 0-1 fraction normalised to sum to 1).
+    # ``progress`` carries this fraction as-is; the frontend renders it
+    # once as a percentage. It is the weight, not observed progress.
     objectives_result = await db.execute(
         select(Objective).where(Objective.user_id == current_user.id)
     )
     objectives = objectives_result.scalars().all()
-    
+    weights = normalise_weights(
+        {
+            (obj.type.value if hasattr(obj.type, "value") else str(obj.type)): obj.weight
+            for obj in objectives
+        }
+    )
+
     objective_progress = []
     for obj in objectives:
         obj_name = obj.type.value if hasattr(obj.type, 'value') else str(obj.type)
         objective_progress.append(ObjectiveProgress(
             objective_name=obj_name.capitalize(),
-            progress=round(obj.weight * 100, 1),
+            progress=weights[obj_name],
             trend="stable",
         ))
     

@@ -78,7 +78,13 @@ class BehaviorCompletion(BaseModel):
 
 
 class ObjectiveProgress(BaseModel):
-    """Objective progress data."""
+    """An objective's share of the user's objective weights (0-1 fraction).
+
+    This is not observed progress toward a goal: it is the configured weight
+    from ``Objective.weight`` (normalised to sum to 1), so 0.125 means the
+    objective carries a 12.5% share of the optimisation objective. The trend
+    is currently hardcoded "stable" in the API; it is not a measured trend.
+    """
 
     objectiveName: str = Field(..., validation_alias="objective_name", serialization_alias="objectiveName")
     progress: float
