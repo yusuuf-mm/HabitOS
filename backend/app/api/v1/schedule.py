@@ -113,6 +113,7 @@ async def get_daily_schedule(
                     startTime=start_time,
                     endTime=end_time,
                     duration=sb.scheduled_duration,
+                    plannedSessionId=sb.planned_session_id,
                     isCompleted=is_completed,
                 )
             )

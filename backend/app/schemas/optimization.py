@@ -30,6 +30,11 @@ class ScheduledBehaviorResponse(BaseModel):
     startTime: str = Field(..., validation_alias="start_time", serialization_alias="startTime")  # HH:mm
     endTime: str = Field(..., validation_alias="end_time", serialization_alias="endTime")    # HH:mm
     duration: int
+    # Stable across re-plans; the row id above is per run. Clients that compare
+    # two plans must key on this one (docs/METRIC.md §4).
+    plannedSessionId: UUID = Field(
+        ..., validation_alias="planned_session_id", serialization_alias="plannedSessionId"
+    )
     isCompleted: bool = Field(False, validation_alias="is_completed", serialization_alias="isCompleted")
     completedAt: Optional[datetime] = Field(None, validation_alias="completed_at", serialization_alias="completedAt")
 

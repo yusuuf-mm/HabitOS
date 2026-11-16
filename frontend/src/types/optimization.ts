@@ -29,6 +29,8 @@ export interface ScheduledBehavior {
   startTime: string; // HH:mm format
   endTime: string;
   duration: number; // minutes
+  // Stable across re-plans; `id` is per run and must not be used as identity.
+  plannedSessionId: string;
   isCompleted: boolean;
   completedAt?: string;
 }

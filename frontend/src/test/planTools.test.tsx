@@ -46,6 +46,7 @@ function schedule(overrides: Partial<DailySchedule> = {}): DailySchedule {
     scheduledBehaviors: [
       {
         id: "s-1",
+        plannedSessionId: "p-1",
         behaviorId: "b-1",
         behavior: { id: "b-1", name: "Deep work" } as never,
         scheduledDate: "2026-06-08",
@@ -84,6 +85,23 @@ describe("plan changes", () => {
     expect(changes.sentences.join(" ")).toContain("kept as they were");
   });
 
+  it("matches sessions by planned id across runs, not by row id", () => {
+    // A re-plan writes new rows: the row id changes, plannedSessionId does not.
+    const before = [
+      { id: "row-1", plannedSessionId: "planned-1", behaviorId: "1", startTime: "09:00", duration: 60 },
+      { id: "row-2", plannedSessionId: "planned-2", behaviorId: "2", startTime: "13:00", duration: 30 },
+    ];
+    const after = [
+      { id: "row-9", plannedSessionId: "planned-1", behaviorId: "1", startTime: "09:30", duration: 60 },
+      { id: "row-10", plannedSessionId: "planned-2", behaviorId: "2", startTime: "13:00", duration: 30 },
+    ];
+    const changes = summariseChanges(before, after);
+    expect(changes.dropped).toHaveLength(0);
+    expect(changes.added).toHaveLength(0);
+    expect(changes.kept).toHaveLength(1);
+    expect(changes.moved).toHaveLength(1);
+  });
+
   it("says plainly when nothing moved", () => {
     const same = [{ id: "a", behaviorId: "1", startTime: "09:00", duration: 60 }];
     expect(summariseChanges(same, same).sentences[0]).toContain("Nothing moved");
@@ -117,7 +135,8 @@ describe("PlanTools", () => {
       data: schedule({
         scheduledBehaviors: [
           {
-            id: "s-1",
+            id: "s-2",
+            plannedSessionId: "p-1",
             behaviorId: "b-1",
             behavior: { id: "b-1", name: "Deep work" } as never,
             scheduledDate: "2026-06-08",

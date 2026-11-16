@@ -203,3 +203,75 @@ async def test_completion_can_point_at_one_session(auth_client: AsyncClient, db_
         )
     ).scalars().all()
     assert [s.id for s in joined] == [second.id]
+
+
+@pytest.mark.asyncio
+async def test_replan_api_keeps_planned_session_id_while_row_ids_change(
+    auth_client: AsyncClient, db_session
+):
+    """The schedule endpoint must expose the stable id, and a re-plan must keep it.
+
+    The row id is per run, so any client that diffs two plans by ``id`` sees
+    every session dropped and re-added. This pins the contract the diff uses.
+    """
+    from app.models import Behavior, BehaviorCategory, ObjectiveImpact, ObjectiveType
+    from app.models.optimization import OptimizationRun, ScheduledBehavior
+
+    user_id = await _get_user_id(auth_client)
+    behavior = Behavior(
+        user_id=user_id,
+        name="Exercise",
+        category=BehaviorCategory.HEALTH,
+        min_duration=30,
+        typical_duration=30,
+        max_duration=30,
+        energy_cost=3.0,
+        preferred_time_slots=["morning"],
+    )
+    db_session.add(behavior)
+    await db_session.flush()
+    db_session.add(
+        ObjectiveImpact(behavior_id=behavior.id, objective_type=ObjectiveType.HEALTH, impact_score=1.0)
+    )
+
+    run = OptimizationRun(
+        user_id=user_id,
+        status="completed",
+        solver="candidate",
+        start_date=_plan_day(),
+        end_date=_plan_day(),
+        time_periods=96,
+        baseline_revision=1,
+        results={"objective_contributions": {"health": {"contribution": 27.0, "weight": 1.0}}},
+        total_objective_value=27.0,
+    )
+    db_session.add(run)
+    await db_session.flush()
+    original = ScheduledBehavior(
+        optimization_run_id=run.id,
+        behavior_id=behavior.id,
+        time_period=30,
+        scheduled_duration=30,
+    )
+    db_session.add(original)
+    await db_session.commit()
+
+    before = await auth_client.get("/api/v1/schedule")
+    assert before.status_code == 200, before.text
+    before_items = before.json()["data"]["scheduledBehaviors"]
+    assert len(before_items) == 1, before_items
+    before_item = before_items[0]
+    assert before_item["plannedSessionId"] == str(original.planned_session_id)
+
+    replan = await auth_client.post("/api/v1/schedule/reoptimize")
+    assert replan.status_code == 200, replan.text
+
+    after = await auth_client.get("/api/v1/schedule")
+    assert after.status_code == 200, after.text
+    after_items = after.json()["data"]["scheduledBehaviors"]
+    assert after_items
+    # Same session, new row: identity survives the re-plan, the row does not.
+    assert {item["plannedSessionId"] for item in after_items} == {
+        before_item["plannedSessionId"]
+    }
+    assert all(item["id"] != before_item["id"] for item in after_items)

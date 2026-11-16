@@ -9,6 +9,8 @@
 
 export interface PlanSession {
   id: string;
+  // Identity across plans. The row id changes on every run; this does not.
+  plannedSessionId?: string;
   behaviorId: string;
   startTime: string;
   duration: number;
@@ -28,6 +30,11 @@ function nameOf(session: PlanSession): string {
   return session.behavior?.name ?? "a session";
 }
 
+/** The identity two plans share: the planned session, not the run's row. */
+export function sessionKey(session: PlanSession): string {
+  return session.plannedSessionId ?? session.id;
+}
+
 function hoursLabel(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
@@ -36,15 +43,15 @@ function hoursLabel(minutes: number): string {
 }
 
 export function summariseChanges(before: PlanSession[], after: PlanSession[]): PlanChanges {
-  const afterById = new Map(after.map((session) => [session.id, session]));
-  const beforeIds = new Set(before.map((session) => session.id));
+  const afterById = new Map(after.map((session) => [sessionKey(session), session]));
+  const beforeIds = new Set(before.map((session) => sessionKey(session)));
 
   const kept: PlanSession[] = [];
   const moved: PlanSession[] = [];
   const dropped: PlanSession[] = [];
 
   for (const session of before) {
-    const next = afterById.get(session.id);
+    const next = afterById.get(sessionKey(session));
     if (!next) {
       dropped.push(session);
       continue;
@@ -56,7 +63,7 @@ export function summariseChanges(before: PlanSession[], after: PlanSession[]): P
     }
   }
 
-  const added = after.filter((session) => !beforeIds.has(session.id));
+  const added = after.filter((session) => !beforeIds.has(sessionKey(session)));
 
   const sentences: string[] = [];
   if (moved.length) {

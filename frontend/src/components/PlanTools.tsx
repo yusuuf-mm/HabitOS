@@ -15,6 +15,7 @@ interface PlanToolsProps {
 function asPlanSessions(schedule: DailySchedule): PlanSession[] {
   return schedule.scheduledBehaviors.map((item) => ({
     id: item.id,
+    plannedSessionId: item.plannedSessionId,
     behaviorId: item.behaviorId,
     startTime: item.startTime,
     duration: item.duration,

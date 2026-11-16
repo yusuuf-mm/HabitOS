@@ -190,6 +190,7 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
                 startTime=start_time,
                 endTime=end_time,
                 duration=duration,
+                plannedSessionId=s.planned_session_id,
                 isCompleted=False, # Default for new runs
             )
         )
