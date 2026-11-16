@@ -59,7 +59,7 @@ echo "  FKs before upgrade: $(fks | tr '\n' ' ')"
 
 echo "== STEP 3: upgrade head =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "b3c4d5e6f7a8"
+check "revision" "$(q 'select version_num from alembic_version')" "b8c9d0e1f2a3"
 check "history rows survive upgrade" "$(counts)" "1/1/1"
 echo "  objective_impacts rows:"
 q "select objective_type||'='||impact_score from objective_impacts order by objective_type;" | sed 's/^/    /'
@@ -77,6 +77,12 @@ check "run plan_revision defaults to 1" "$(q "select plan_revision from optimiza
 check "legacy completion linked to its session" "$(q "select count(*) from completion_logs c join scheduled_behaviors s on s.planned_session_id=c.planned_session_id")" "1"
 check "retired/released start empty" "$(q "select count(*) from scheduled_behaviors where retired_revision is not null or released_at is not null")" "0"
 
+echo "== STEP 3b: protected flag and candidate solver enum =="
+check "is_protected exists" "$(q "select count(*) from information_schema.columns where table_name='behaviors' and column_name='is_protected'")" "1"
+check "existing behaviours are not protected" "$(q 'select count(*) from behaviors where is_protected')" "0"
+check "solvertype offers CANDIDATE" "$(q "select count(*) from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='solvertype' and e.enumlabel='CANDIDATE'")" "1"
+echo "  enum values: $(q "select string_agg(enumlabel, ',' order by enumsortorder) from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='solvertype'")"
+
 echo "== STEP 4: downgrade past e1f2a3b4c5d6 =="
 $RUN alembic downgrade d4e5f6a7b8c9 2>&1 | tail -3 || FAILED=1
 check "revision" "$(q 'select version_num from alembic_version')" "d4e5f6a7b8c9"
@@ -84,6 +90,10 @@ check "history rows survive e1f2 downgrade" "$(counts)" "1/1/1"
 echo "  FKs after e1f2 downgrade (c=CASCADE): $(fks | tr '\n' ' ')"
 check "scheduled FK reverted to CASCADE" "$(q "select confdeltype from pg_constraint where conrelid='scheduled_behaviors'::regclass and contype='f' and confrelid='behaviors'::regclass")" "c"
 check "completion FK reverted to CASCADE" "$(q "select confdeltype from pg_constraint where conrelid='completion_logs'::regclass and contype='f' and confrelid='behaviors'::regclass")" "c"
+
+check "downgrade removed is_protected" "$(q "select count(*) from information_schema.columns where table_name='behaviors' and column_name='is_protected'")" "0"
+check "downgrade removed CANDIDATE from the enum" "$(q "select count(*) from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='solvertype' and e.enumlabel='CANDIDATE'")" "0"
+check "runs fell back to LINEAR" "$(q "select count(*) from optimization_runs where solver='LINEAR'")" "1"
 
 echo "== STEP 5: downgrade past c1a2b3c4d5e6 =="
 $RUN alembic downgrade b96cd1f49448 2>&1 | tail -3 || FAILED=1
@@ -97,7 +107,7 @@ check "objective_impacts dropped" "$(q "select count(*) from information_schema.
 
 echo "== STEP 6: upgrade head again =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "b3c4d5e6f7a8"
+check "revision" "$(q 'select version_num from alembic_version')" "b8c9d0e1f2a3"
 check "history rows survive second upgrade" "$(counts)" "1/1/1"
 check "objective_impacts count" "$(q 'select count(*) from objective_impacts')" "3"
 check "health impact" "$(q "select impact_score from objective_impacts where objective_type='HEALTH'")" "0.9"
@@ -115,7 +125,7 @@ check "completion FK restored" "$(q "select count(*) from pg_constraint where co
 
 echo "== STEP 8: upgrade head again =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "b3c4d5e6f7a8"
+check "revision" "$(q 'select version_num from alembic_version')" "b8c9d0e1f2a3"
 check "history rows survive second upgrade" "$(counts)" "1/1/1"
 check "existing users default to UTC" "$(q "select timezone from users limit 1")" "UTC"
 check "per-revision identity constraint in place" "$(q "select count(*) from pg_constraint where conname='uq_scheduled_behaviors_session_revision'")" "1"

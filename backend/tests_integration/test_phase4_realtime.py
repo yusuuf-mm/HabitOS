@@ -1,4 +1,6 @@
 """Phase 4 integration tests — WebSocket broadcast + partial-day re-optimization + telemetry."""
+
+from tests_integration.support import plan_day, plan_now
 import asyncio
 from datetime import date, datetime, timezone
 from unittest.mock import patch, AsyncMock
@@ -14,7 +16,7 @@ def _plan_day():
     the user's day is still running; runs dated with it would not be found by a
     route that asks for today on the user's clock.
     """
-    return datetime.now(timezone.utc).date()
+    return plan_day()
 
 
 
@@ -130,7 +132,7 @@ async def test_broadcast_called_on_incomplete(auth_client: AsyncClient, db_sessi
         behavior_id=behavior.id,
         optimization_run_id=run.id,
         actual_duration=30,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=plan_now(),
     )
     db_session.add(log)
     await db_session.commit()

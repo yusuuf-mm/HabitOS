@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScheduleView } from "@/components/ScheduleView";
+import { PlanTools } from "@/components/PlanTools";
 import { PageLoader } from "@/components/Loader";
 import { apiClient } from "@/services/apiClient";
 import { useToast } from "@/hooks/use-toast";
@@ -143,11 +144,18 @@ export default function Schedule() {
       {isLoading ? (
         <PageLoader text="Loading schedule..." />
       ) : schedule ? (
-        <ScheduleView
-          schedule={schedule}
-          onMarkComplete={handleMarkComplete}
-          onMarkIncomplete={handleMarkIncomplete}
-        />
+        <div className="space-y-4">
+          <PlanTools
+            schedule={schedule}
+            date={currentDate.toISOString().split("T")[0]}
+            onChanged={setSchedule}
+          />
+          <ScheduleView
+            schedule={schedule}
+            onMarkComplete={handleMarkComplete}
+            onMarkIncomplete={handleMarkIncomplete}
+          />
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12 text-center">
           <p className="text-muted-foreground">No schedule for this date</p>

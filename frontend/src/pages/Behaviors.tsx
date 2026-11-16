@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { BehaviorForm } from "@/components/BehaviorForm";
 import { BehaviorList } from "@/components/BehaviorList";
+import { WeightsEditor } from "@/components/WeightsEditor";
 import { PageLoader } from "@/components/Loader";
 import { apiClient } from "@/services/apiClient";
 import { useToast } from "@/hooks/use-toast";
@@ -153,6 +154,8 @@ export default function Behaviors() {
 
   return (
     <div className="space-y-6">
+      <WeightsEditor />
+
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="page-header mb-0">

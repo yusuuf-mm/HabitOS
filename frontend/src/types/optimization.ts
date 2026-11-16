@@ -67,4 +67,6 @@ export interface DailySchedule {
   totalDuration: number;
   objectiveScores: ObjectiveContribution[];
   createdAt: string;
+  // Present on the schedule endpoint; why the planner left habits out.
+  declines?: Array<{ behaviorId: string; behaviorName: string; reason: string }>;
 }

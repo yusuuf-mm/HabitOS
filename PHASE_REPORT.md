@@ -724,7 +724,82 @@ unchanged.
 
 ## Phase 4 — Re-planning that works
 
-Not started.
+### Step A — verify and tidy
+
+**A.1 protected tier.** Before this phase only `SolveStatus.PROTECTED_CONFLICT`
+existed; there was no flag, no tier and no conflict result. It is now real:
+
+- `behaviors.is_protected` (additive, default false, migration
+  `a7b8c9d0e1f2`), surfaced as `isProtected` in create/update/response.
+- `BehaviorScheduleInput.protected`, loaded by both the solve and re-plan paths.
+- The candidate solver gives a declined protected behaviour a
+  `PROTECTED_DECLINE_PENALTY` of 1,000,000, so protected habits are placed
+  before anything else while the objective still decides among their feasible
+  slots.
+- If one still cannot be placed, the solution status becomes
+  `protected_conflict` and `diagnostics.protected_conflict` carries
+  `{unplaced, conflicting, minimalRelaxation}`. Both the solve route and
+  `POST /schedule/reoptimize` answer 409 with that payload and persist nothing.
+
+Tests: five protected cases in `backend/tests/test_candidate_solver.py`
+(protected placed first, dropped only when impossible, conflict reports the
+blocking set, relaxation is minimal, non-protected still declines normally) and
+`backend/tests_integration/test_protected.py` (flag round-trip, protected
+conflict 409 on solve, 409 on reoptimize with the old plan intact).
+
+**A.2 clock.** `backend/app/core/clock.py` provides `now_utc()`,
+`today_local(tz)` and a `fixed_now` context manager. Production code in metrics,
+schedule, analytics and telemetry now asks the clock instead of `datetime.now`
+or `date.today`; plan-local days go through `local_today(user_zone(...))`.
+Six integration modules had wall-clock dependencies (metric, schedule,
+behaviors, restrict_postgres, session_identity, phase4_realtime); the
+integration conftest now freezes "now" at 2026-06-08 12:00 UTC, with
+`tests_integration/support.py` deriving plan dates from it.
+
+**A.3 solver column.** `optimization_runs.solver` can store `candidate`
+(new enum value, migration `b8c9d0e1f2a3`, downgrade rebuilds the type and maps
+`candidate` to `linear`). Both write paths record `candidate`; the solver
+variant stays in results/diagnostics.
+
+**Not proven:** the Docker daemon is not running on this machine, so
+`tools/migration_cycle.sh` could not run against the local `postgres:15-alpine`
+image in this phase. The migration files and the script's new head are
+committed, but upgrade/downgrade on Postgres is unverified here.
+
+### Step B — docs/ITEMS.md
+
+Written: habit / commitment / deadline held in one `items` table with a kind
+discriminator and kind-specific nullable columns (recommended over widening
+`behaviors`), commitments entering the solver as blocked periods rather than
+decision variables, commitments excluded from the completion-rate denominator
+and reported separately, limited runs expiring by date range, reminder offsets
+as data (no scheduler yet), and the AI helper producing a validated
+`items[]` draft that the user confirms.
+
+### Step C — screens
+
+- **Re-plan:** "Re-plan the rest of my day" on the schedule page, followed by a
+  plain-language diff (kept / moved to HH:MM / dropped / added) computed by id
+  from the before and after schedules.
+- **Declines:** the schedule payload now carries the run's `declines`; the UI
+  turns reason codes into sentences and offers "What would it cost to fit it?",
+  wired to `POST /optimization/forced-include`, reporting the displaced
+  sessions and the objective change.
+- **Release and commit:** per-session Release and "Commit / start my day" call
+  the existing endpoints; the dashboard shows "Kept my plan" and "Handled the
+  day" with the released/dropped counts, and the invented "+5%" trend is gone.
+- **Weights:** an objectives editor on the behaviours page sends normalised
+  weights through the existing objectives PUT.
+- **Landing hero:** 96 squares now render a real day produced by the candidate
+  solver via `tools/generate_hero_day.py` (`npm run gen:hero` →
+  `frontend/src/data/heroDay.json`), not `Math.random()`.
+
+Checks: frontend `tsc --noEmit` clean, `npm test` 17 passed (10 new),
+`npm run build` succeeds; backend full suite 121 passed, 1 skipped, 1 xpassed.
+
+**Not done:** no browser session was available for this phase, so the screens
+above were not exercised in a real browser and no before/after screenshots were
+taken.
 
 ---
 

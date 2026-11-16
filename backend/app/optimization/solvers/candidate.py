@@ -54,6 +54,10 @@ ALIGN_PERIODS = 2  # 30 minutes
 # session the behaviour would have earned, plus a tie-break so that a
 # zero-value behaviour is still placed when there is room for it.
 DECLINE_TIE_BREAK = 1e-3
+# Declining a protected habit costs more than any schedule can be worth, so the
+# model places every protected habit it can and a residual decline is a conflict,
+# not a preference.
+PROTECTED_DECLINE_PENALTY = 1_000_000.0
 
 Window = Tuple[int, int]  # half-open period range
 
@@ -271,8 +275,12 @@ class CandidateSolver:
             score = _score(behavior, problem.objectives)
             for index, (_start, length) in enumerate(candidates[b_idx]):
                 objective.append(y[(b_idx, index)] * length * MINUTES_PER_PERIOD * score)
-            penalty = max(0.0, score) * behavior.min_duration + DECLINE_TIE_BREAK
-            objective.append(-z[b_idx] * penalty)
+            penalty = (
+                PROTECTED_DECLINE_PENALTY
+                if behavior.protected
+                else max(0.0, score) * behavior.min_duration
+            )
+            objective.append(-z[b_idx] * (penalty + DECLINE_TIE_BREAK))
         lp += pulp.lpSum(objective)
 
         by_period: Dict[int, List[pulp.LpVariable]] = {}
@@ -397,9 +405,18 @@ class CandidateSolver:
                 }
             )
 
+        declined_ids = {d["behaviorId"] for d in declined}
+        conflict = self._protected_conflict(
+            problem, candidates, sessions, declined_ids
+        )
+
         diagnostics = {
             "solver_status": status_name,
-            "solve_status": SolveStatus.OPTIMAL.value,
+            "solve_status": (
+                SolveStatus.PROTECTED_CONFLICT.value
+                if conflict
+                else SolveStatus.OPTIMAL.value
+            ),
             "candidate_count": len(y),
             "declines": declined,
             "declines_count": len(declined),
@@ -407,6 +424,8 @@ class CandidateSolver:
             "solver_objective": round(float(lp.objective.value() or 0.0), 4),
             "formulation": "candidate",
         }
+        if conflict:
+            diagnostics["protected_conflict"] = conflict
         if forced:
             diagnostics["forced_behavior_ids"] = sorted(forced)
         if partial:
@@ -421,7 +440,74 @@ class CandidateSolver:
             sessions,
             diagnostics=diagnostics,
             started=started,
+            status=(
+                SolveStatus.PROTECTED_CONFLICT.value if conflict else SolveStatus.OPTIMAL.value
+            ),
         )
+
+    @staticmethod
+    def _protected_conflict(
+        problem: OptimizationProblem,
+        candidates: Dict[int, List[Tuple[int, int]]],
+        sessions: Sequence[ScheduleItem],
+        declined_ids: Set[str],
+    ) -> Optional[Dict]:
+        """Which sessions block the protected habits that did not fit.
+
+        For each unplaced protected habit, find the candidate that overlaps the
+        fewest already-scheduled sessions: that is the smallest relaxation that
+        would make room for it. Reports the unplaced habits, the blocking
+        sessions, and the relaxations with the minutes each would free.
+        """
+        busy: Dict[int, ScheduleItem] = {}
+        for item in sessions:
+            for offset in range(item.scheduled_duration // MINUTES_PER_PERIOD):
+                busy[item.time_period + offset] = item
+
+        unplaced: List[Dict] = []
+        blocking: Dict[str, Dict] = {}
+
+        for b_idx, behavior in enumerate(problem.behaviors):
+            if not behavior.protected or str(behavior.id) not in declined_ids:
+                continue
+
+            best_blockers: Optional[Dict[str, ScheduleItem]] = None
+            for start, length in candidates.get(b_idx, []):
+                blockers: Dict[str, ScheduleItem] = {}
+                for period in range(start, start + length):
+                    item = busy.get(period)
+                    if item is not None:
+                        blockers[str(item.behavior_id)] = item
+                if best_blockers is None or len(blockers) < len(best_blockers):
+                    best_blockers = blockers
+
+            blockers = best_blockers or {}
+            unplaced.append(
+                {
+                    "behaviorId": str(behavior.id),
+                    "behaviorName": behavior.name,
+                    "minDuration": behavior.min_duration,
+                    "blockedBy": sorted(blockers),
+                }
+            )
+            for behavior_id, item in blockers.items():
+                blocking[behavior_id] = {
+                    "behaviorId": behavior_id,
+                    "behaviorName": item.behavior_name,
+                    "minutes": blocking.get(behavior_id, {}).get("minutes", 0)
+                    + item.scheduled_duration,
+                }
+
+        if not unplaced:
+            return None
+
+        return {
+            "unplaced": unplaced,
+            "conflicting": sorted(blocking.values(), key=lambda entry: entry["behaviorId"]),
+            "minimalRelaxation": sorted(
+                blocking.values(), key=lambda entry: entry["behaviorId"]
+            ),
+        }
 
     @staticmethod
     def _decline_reason(
@@ -456,6 +542,7 @@ class CandidateSolver:
         *,
         diagnostics: Dict,
         started: float,
+        status: str = SolveStatus.OPTIMAL.value,
     ) -> OptimizationSolution:
         items = sorted(
             list(frozen_items) + list(sessions), key=lambda item: item.time_period
@@ -480,7 +567,7 @@ class CandidateSolver:
 
         return OptimizationSolution(
             optimization_run_id=optimization_run_id,
-            status=SolveStatus.OPTIMAL.value,
+            status=status,
             solver=solver_name,
             total_objective_value=total_value,
             schedule_items=items,

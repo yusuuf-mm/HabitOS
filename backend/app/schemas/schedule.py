@@ -18,6 +18,8 @@ class DailySchedule(BaseModel):
     totalDuration: int = Field(..., validation_alias="total_duration", serialization_alias="totalDuration")
     objectiveScores: List[ObjectiveContributionSchema] = Field(..., validation_alias="objective_scores", serialization_alias="objectiveScores")
     createdAt: datetime = Field(..., validation_alias="created_at", serialization_alias="createdAt")
+    # Why the planner left behaviours out, straight from the run's diagnostics.
+    declines: List[dict] = Field(default_factory=list)
 
     class Config:
         """Pydantic config."""

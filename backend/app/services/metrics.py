@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.core.constants import MINUTES_PER_PERIOD
 from app.models import CompletionLog, OptimizationRun, ScheduledBehavior
 from app.models import User
@@ -42,7 +43,7 @@ def user_zone(user: User | None) -> tzinfo:
 
 
 def local_today(tz: tzinfo, now: datetime | None = None) -> date:
-    return (now or datetime.now(UTC)).astimezone(tz).date()
+    return (now or clock.now_utc()).astimezone(tz).date()
 
 
 def plan_day_start(day: date, tz: tzinfo) -> datetime:
@@ -173,7 +174,7 @@ async def resolve_day_plan(
         return DayPlan(day, committed[-1], True, "committed")
 
     tz = user_zone(user)
-    now = now or datetime.now(UTC)
+    now = now or clock.now_utc()
     sessions = await _sessions_for(db, [run.id for run in runs])
 
     freeze_at = plan_day_start(day, tz)  # 05:00 local
@@ -195,7 +196,7 @@ async def compute_day(db: AsyncSession, user: User, day: date, now: datetime | N
         return Metric(source=plan.source)
 
     tz = user_zone(user)
-    now = now or datetime.now(UTC)
+    now = now or clock.now_utc()
     day_end = local_day_end(day, tz)
 
     sessions = await _sessions_for(db, [plan.run.id])

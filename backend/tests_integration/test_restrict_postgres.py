@@ -8,7 +8,9 @@ test creates its own rows and removes them again.
       uv run pytest tests_integration/test_restrict_postgres.py -v
 """
 
+
 from __future__ import annotations
+from tests_integration.support import plan_day, plan_now
 
 import os
 import uuid
@@ -94,8 +96,8 @@ async def test_hard_delete_of_behaviour_is_rejected_by_restrict(pg_engine):
                     user_id=user_id,
                     status=OptimizationStatus.COMPLETED,
                     solver=SolverType.LINEAR,
-                    start_date=date.today(),
-                    end_date=date.today(),
+                    start_date=plan_day(),
+                    end_date=plan_day(),
                     time_periods=96,
                 )
             )
@@ -115,7 +117,7 @@ async def test_hard_delete_of_behaviour_is_rejected_by_restrict(pg_engine):
                     behavior_id=behavior_id,
                     optimization_run_id=run_id,
                     actual_duration=30,
-                    completed_at=datetime.now(timezone.utc),
+                    completed_at=plan_now(),
                 )
             )
             await session.commit()

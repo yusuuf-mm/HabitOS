@@ -74,3 +74,29 @@ export interface AnalyticsData {
     percentage: number;
   }>;
 }
+
+export interface ForcedSession {
+  behaviorId: string;
+  behaviorName: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+}
+
+export interface DisplacedSession {
+  behaviorId: string;
+  behaviorName: string;
+  reason: string;
+  minutes: number;
+}
+
+export interface ForcedIncludeResult {
+  fits: boolean;
+  forced: ForcedSession[];
+  displaced: DisplacedSession[];
+  relaxations: Array<{ kind: string; behaviorId: string; detail: string }>;
+  objectiveChange: number;
+  solverObjective?: number;
+  seconds: number;
+  reason?: string;
+}

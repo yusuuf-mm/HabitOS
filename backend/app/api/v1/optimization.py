@@ -56,6 +56,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/optimization", tags=["optimization"])
 
 
+def _raise_on_protected_conflict(solution) -> None:
+    """A plan that cannot place every protected habit is a conflict, not a plan.
+
+    Nothing is persisted: the previous plan stands and the response names the
+    habits that did not fit, what blocks them and the smallest relaxation.
+    """
+    if solution.status != "protected_conflict":
+        return
+    conflict = (solution.diagnostics or {}).get("protected_conflict") or {}
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "protected_conflict",
+            "message": (
+                "A protected habit cannot be placed today; relax one of the "
+                "conflicting sessions or shorten the habit."
+            ),
+            "unplaced": conflict.get("unplaced", []),
+            "conflicting": conflict.get("conflicting", []),
+            "minimalRelaxation": conflict.get("minimalRelaxation", []),
+        },
+    )
+
+
 async def _load_problem(
     db: AsyncSession, user: User, target_date: date_class
 ):
@@ -105,6 +129,7 @@ async def _load_problem(
             preferred_time_slots=[
                 s.value if hasattr(s, "value") else s for s in b.preferred_time_slots
             ],
+            protected=bool(getattr(b, "is_protected", False)),
         )
         for b in behaviors_db
     ]
@@ -259,14 +284,15 @@ async def solve_optimization(
             timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS,
         )
 
+        _raise_on_protected_conflict(solution)
+
         # Save to database
         run = OptimizationRun(
             id=optimization_run_id,
             user_id=current_user.id,
             status="completed" if solution.status == "optimal" else "feasible",
-            # The column is a coarse enum (linear/heuristic/...); the exact
-            # formulation is recorded in results + diagnostics instead.
-            solver="linear",
+            solver="candidate",
+            # Variant (full/partial/forced) stays in results + diagnostics.
             start_date=start_date,
             end_date=start_date,
             time_periods=PERIODS_PER_DAY,

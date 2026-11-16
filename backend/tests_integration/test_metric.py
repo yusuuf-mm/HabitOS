@@ -3,6 +3,8 @@
 These assert the promises the document makes, not internal structure: what counts,
 what leaves the denominator, what stays in it, and when the answer is null.
 """
+
+from tests_integration.support import plan_day, plan_now
 from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -20,7 +22,7 @@ from app.services.metrics import (
 )
 
 UTC = timezone.utc
-DAY = datetime.now(UTC).date()  # "today" so completion timestamps land inside the day
+DAY = plan_day()  # "today" so completion timestamps land inside the day
 
 
 def _future_period(minutes_ahead: int = 120) -> int:
@@ -29,7 +31,7 @@ def _future_period(minutes_ahead: int = 120) -> int:
     The release and commit endpoints use the real clock, so a hard-coded period
     is only future before that hour. Near midnight there is no such slot left.
     """
-    now = datetime.now(UTC)
+    now = plan_now()
     period = (now.hour * 60 + now.minute + minutes_ahead) // 15
     if period >= 96:
         pytest.skip("no future session slot left in the local day")
@@ -73,7 +75,7 @@ async def _run(db_session, user_id, revision=1, baseline=None, created_at=None):
         time_periods=96,
         plan_revision=revision,
         baseline_revision=baseline,
-        committed_at=datetime.now(UTC) if baseline is not None else None,
+        committed_at=plan_now() if baseline is not None else None,
     )
     if created_at is not None:
         run.created_at = created_at
@@ -123,8 +125,8 @@ async def test_rate_is_completed_over_baseline_minus_released(auth_client, db_se
     behavior = await _behavior(db_session, user_id)
     run = await _run(db_session, user_id, baseline=1)
     sessions = [await _session(db_session, run.id, behavior.id, period=30 + i) for i in range(4)]
-    await _complete(db_session, user_id, behavior.id, sessions[0], datetime.now(UTC))
-    sessions[1].released_at = datetime.now(UTC)
+    await _complete(db_session, user_id, behavior.id, sessions[0], plan_now())
+    sessions[1].released_at = plan_now()
     await db_session.commit()
 
     metric = await compute_day(db_session, user, DAY)
@@ -142,7 +144,7 @@ async def test_system_dropped_stays_in_denominator_and_is_reported(auth_client, 
     behavior = await _behavior(db_session, user_id)
     run = await _run(db_session, user_id, baseline=1)
     sessions = [await _session(db_session, run.id, behavior.id, period=30 + i) for i in range(3)]
-    await _complete(db_session, user_id, behavior.id, sessions[0], datetime.now(UTC))
+    await _complete(db_session, user_id, behavior.id, sessions[0], plan_now())
     sessions[1].retired_revision = 2
     await db_session.commit()
 
@@ -162,7 +164,7 @@ async def test_zero_denominator_returns_null_not_one(auth_client, db_session):
     behavior = await _behavior(db_session, user_id)
     run = await _run(db_session, user_id, baseline=1)
     session = await _session(db_session, run.id, behavior.id)
-    session.released_at = datetime.now(UTC)
+    session.released_at = plan_now()
     await db_session.commit()
 
     metric = await compute_day(db_session, user, DAY)
@@ -257,7 +259,7 @@ async def test_multi_day_rate_is_summed_not_averaged(auth_client, db_session):
 
     day_two = await _run(db_session, user_id, baseline=1)
     ten = [await _session(db_session, day_two.id, behavior.id, period=30 + i) for i in range(10)]
-    await _complete(db_session, user_id, behavior.id, ten[0], datetime.now(UTC))
+    await _complete(db_session, user_id, behavior.id, ten[0], plan_now())
     await db_session.commit()
     assert first_day_log
 
@@ -299,7 +301,7 @@ async def test_release_endpoint_removes_session_from_denominator(auth_client, db
     behavior = await _behavior(db_session, user_id)
     run = await _run(db_session, user_id, baseline=1)
     session = await _session(db_session, run.id, behavior.id, period=_future_period())
-    run.start_date = run.end_date = datetime.now(UTC).date()
+    run.start_date = run.end_date = plan_day()
     await db_session.commit()
 
     resp = await auth_client.post(f"/api/v1/schedule/{session.id}/release")
@@ -321,7 +323,7 @@ async def test_commit_records_exactly_one_baseline_per_day(auth_client, db_sessi
 
     user_id = await _get_user_id(auth_client)
     behavior = await _behavior(db_session, user_id)
-    today = datetime.now(UTC).date()
+    today = plan_day()
     first = await _run(db_session, user_id, revision=1)
     first.start_date = first.end_date = today
     await _session(db_session, first.id, behavior.id, period=_future_period(180))
@@ -362,7 +364,7 @@ async def test_replan_never_shrinks_the_baseline(auth_client, db_session):
     user_id = await _get_user_id(auth_client)
     user = await db_session.get(User, user_id)
     behavior = await _behavior(db_session, user_id)
-    today = datetime.now(UTC).date()
+    today = plan_day()
     baseline = await _run(db_session, user_id, baseline=1)
     baseline.start_date = baseline.end_date = today
     await _session(db_session, baseline.id, behavior.id, period=30, duration=30)
@@ -394,7 +396,7 @@ async def test_replan_keeps_planned_session_id_across_revisions(auth_client, db_
 
     user_id = await _get_user_id(auth_client)
     behavior = await _behavior(db_session, user_id)
-    today = datetime.now(UTC).date()
+    today = plan_day()
     baseline = await _run(db_session, user_id, baseline=1)
     baseline.start_date = baseline.end_date = today
     original = await _session(db_session, baseline.id, behavior.id, period=30, duration=30)
@@ -424,7 +426,7 @@ async def test_solve_returns_409_when_todays_baseline_is_frozen(auth_client, db_
     """/optimization/solve must not create a second plan for a frozen day."""
     user_id = await _get_user_id(auth_client)
     behavior = await _behavior(db_session, user_id)
-    today = datetime.now(UTC).date()
+    today = plan_day()
     run = await _run(db_session, user_id, baseline=1)
     run.start_date = run.end_date = today
     await _session(db_session, run.id, behavior.id, period=_future_period())
@@ -441,7 +443,7 @@ async def test_solve_returns_409_when_todays_baseline_is_frozen(auth_client, db_
 async def test_solve_for_a_future_day_is_unaffected(auth_client, db_session):
     user_id = await _get_user_id(auth_client)
     behavior = await _behavior(db_session, user_id)
-    today = datetime.now(UTC).date()
+    today = plan_day()
     run = await _run(db_session, user_id, baseline=1)
     run.start_date = run.end_date = today
     await _session(db_session, run.id, behavior.id, period=_future_period())

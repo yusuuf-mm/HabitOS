@@ -1,19 +1,28 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 
-const BLOCK_ROWS = 24;
+import heroDay from "@/data/heroDay.json";
+
 const BLOCK_COLS = 4;
+const BLOCK_ROWS = 24;
 const TOTAL = BLOCK_ROWS * BLOCK_COLS;
 
 function SpatialGrid() {
+  // The grid is a real plan produced by the solver (tools/generate_hero_day.py),
+  // not decoration: six sessions placed across the day, 15 minutes per square.
   const blocks = useMemo(() => {
     return Array.from({ length: TOTAL }, (_, i) => {
       const row = Math.floor(i / BLOCK_COLS);
       const col = i % BLOCK_COLS;
-      const delay = (row * 0.08 + col * 0.15).toFixed(2);
-      const duration = (4 + Math.random() * 3).toFixed(2);
-      const isActive = Math.random() > 0.6;
-      return { row, col, delay, duration, isActive };
+      const cell = heroDay.cells[i] ?? { kind: "free", label: null };
+      return {
+        row,
+        col,
+        delay: (row * 0.04).toFixed(2),
+        duration: "6.00",
+        isActive: cell.kind === "session",
+        label: cell.label,
+      };
     });
   }, []);
 

@@ -230,3 +230,115 @@ def test_plan_records_the_weights_it_used():
     solution = CandidateSolver(timeout_seconds=10).solve(problem, uuid4())
     assert solution.diagnostics["objective_weights"] == {"health": 1.0}
     assert solution.diagnostics["formulation"] == "candidate"
+
+
+# ---------------------------------------------------------------------------
+# Protected tier: scheduled first, never dropped silently, conflict reported
+# with the conflicting set and the smallest relaxation.
+# ---------------------------------------------------------------------------
+
+
+def _protected(name="Protected", **kwargs):
+    behaviour = _behavior(name, **kwargs)
+    behaviour.protected = True
+    return behaviour
+
+
+def test_protected_habits_are_all_scheduled_when_they_fit():
+    behaviours = [
+        _protected("P1", lo=30, hi=30, slots=("morning",)),
+        _protected("P2", lo=30, hi=30, slots=("morning",)),
+        _protected("P3", lo=30, hi=30, slots=("morning",)),
+        _behavior("F1", lo=60, hi=60, slots=("morning",)),
+    ]
+    problem = _problem(behaviours)
+    solution = CandidateSolver(timeout_seconds=10).solve(problem, uuid4())
+
+    scheduled = {item.behavior_id for item in solution.schedule_items}
+    for behaviour in behaviours[:3]:
+        assert behaviour.id in scheduled, f"{behaviour.name} was dropped"
+    assert solution.status == "optimal"
+    assert "protected_conflict" not in (solution.diagnostics or {})
+    assert validate_schedule(problem, solution.schedule_items) == []
+
+
+def test_protected_wins_a_contested_window():
+    protected = _protected("Hospital", lo=60, hi=60, slots=("midday",))
+    flexible = [
+        _behavior("Flex A", lo=60, hi=60, slots=("midday",)),
+        _behavior("Flex B", lo=60, hi=60, slots=("midday",)),
+    ]
+    problem = _problem([flexible[0], protected, flexible[1]])
+    solution = CandidateSolver(timeout_seconds=10).solve(problem, uuid4())
+
+    scheduled = {item.behavior_id for item in solution.schedule_items}
+    assert protected.id in scheduled, "the protected habit must take the slot"
+    declined = {d["behaviorId"] for d in solution.diagnostics["declines"]}
+    assert len(declined) == 1, declined
+    assert str(protected.id) not in declined
+
+
+def test_protected_over_capacity_is_a_conflict_not_a_plan():
+    protected = [
+        _protected(f"P{i}", lo=60, hi=60, slots=("midday",)) for i in range(3)
+    ]
+    problem = _problem(protected)
+    solution = CandidateSolver(timeout_seconds=10).solve(problem, uuid4())
+
+    assert solution.status == "protected_conflict"
+    conflict = solution.diagnostics["protected_conflict"]
+    assert conflict["unplaced"], "the protected habit that did not fit must be named"
+    assert conflict["conflicting"], "the blocking sessions must be named"
+    assert conflict["minimalRelaxation"], "the smallest relaxation must be named"
+    # The plan that comes back is still internally valid; it is the status that
+    # says not to hand it over as the day's plan.
+    assert validate_schedule(problem, solution.schedule_items) == []
+    assert len(solution.schedule_items) == 2
+
+
+def test_the_relaxation_names_the_fewest_sessions_that_free_a_slot():
+    # One 120-minute midday slot: two protected habits fit, the third conflicts.
+    protected = [
+        _protected(f"P{i}", lo=60, hi=60, slots=("midday",)) for i in range(3)
+    ]
+    problem = _problem(protected)
+    solution = CandidateSolver(timeout_seconds=10).solve(problem, uuid4())
+    conflict = solution.diagnostics["protected_conflict"]
+
+    unplaced = conflict["unplaced"][0]
+    assert len(unplaced["blockedBy"]) == 1, (
+        "dropping one 60-minute session frees a whole 60-minute slot"
+    )
+    assert len(conflict["minimalRelaxation"]) == 1
+    assert conflict["minimalRelaxation"][0]["minutes"] == 60
+
+
+def test_protected_conflict_cases_mirroring_the_oracle():
+    """The oracle's protected_conflict category, in production terms."""
+    cases = [
+        # 05:00-07:00, two protected 45-minute habits: both fit.
+        ([_protected(f"E{i}", lo=45, hi=45, slots=("early_morning",)) for i in range(2)], False),
+        # 05:00-07:00, four 45-minute protected habits: only two fit.
+        ([_protected(f"E{i}", lo=45, hi=45, slots=("early_morning",)) for i in range(4)], True),
+        # A flexible habit fills the window first; protected still gets in.
+        ([
+            _behavior("F", lo=120, hi=120, slots=("midday",)),
+            _protected("P", lo=60, hi=60, slots=("midday",)),
+        ], False),
+    ]
+    for behaviours, expect_conflict in cases:
+        problem = _problem(behaviours)
+        solution = CandidateSolver(timeout_seconds=10).solve(problem, uuid4())
+        assert (solution.status == "protected_conflict") is expect_conflict, [
+            b.name for b in behaviours
+        ]
+        if expect_conflict:
+            conflict = solution.diagnostics["protected_conflict"]
+            assert conflict["unplaced"] and conflict["conflicting"]
+            assert conflict["minimalRelaxation"]
+        else:
+            scheduled = {item.behavior_id for item in solution.schedule_items}
+            for behaviour in behaviours:
+                if behaviour.protected:
+                    assert behaviour.id in scheduled
+        assert validate_schedule(problem, solution.schedule_items) == []

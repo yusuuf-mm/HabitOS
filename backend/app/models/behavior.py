@@ -57,6 +57,9 @@ class Behavior(Base):
     max_duration: Mapped[int] = mapped_column(Integer, nullable=False)
     energy_cost: Mapped[float] = mapped_column(Float, default=1.0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Protected habits are placed first and never dropped silently; if they
+    # cannot all fit the solve reports a protected conflict (docs/FORMULATION.md).
+    is_protected: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     preferred_time_slots: Mapped[list[TimeSlot]] = mapped_column(
         ARRAY(SQLEnum(TimeSlot)).with_variant(JSON, "sqlite"),
         default=[TimeSlot.FLEXIBLE]

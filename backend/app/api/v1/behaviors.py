@@ -146,6 +146,7 @@ def map_behavior_to_response(behavior: Behavior, stats: tuple = None, objective_
         preferred_time_slots=[s.value if hasattr(s, "value") else str(s) for s in behavior.preferred_time_slots],
         objective_impacts=impacts,
         is_active=behavior.is_active,
+        is_protected=bool(getattr(behavior, "is_protected", False)),
         frequency=getattr(behavior, "frequency", "daily"),
         frequency_count=getattr(behavior, "frequency_count", None),
         created_at=behavior.created_at,
@@ -233,6 +234,7 @@ async def create_behavior(
         energy_cost=request.energyCost,
         preferred_time_slots=request.preferredTimeSlots or ["flexible"],
         is_active=request.isActive,
+        is_protected=request.isProtected,
     )
     db.add(behavior)
     await db.flush()
@@ -419,6 +421,8 @@ async def update_behavior(
         behavior.preferred_time_slots = request.preferredTimeSlots
     if request.isActive is not None:
         behavior.is_active = request.isActive
+    if request.isProtected is not None:
+        behavior.is_protected = request.isProtected
 
     if request.objectiveImpacts is not None:
         await _sync_objective_impacts(

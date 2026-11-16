@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
+from app.core import clock
 from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.services.metrics import (
     day_runs,
@@ -36,7 +37,11 @@ async def get_daily_schedule(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Get daily schedule."""
-    target_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
+    target_date = (
+        datetime.strptime(date_str, "%Y-%m-%d").date()
+        if date_str
+        else local_today(user_zone(current_user))
+    )
 
     # 1. Find active run covering the date
     result = await db.execute(
@@ -59,7 +64,8 @@ async def get_daily_schedule(
                 scheduled_behaviors=[],
                 total_duration=0,
                 objective_scores=[],
-                created_at=datetime.now(timezone.utc),
+                created_at=clock.now_utc(),
+                declines=[],
             ),
             message="No schedule found for this date"
         )
@@ -140,6 +146,7 @@ async def get_daily_schedule(
             total_duration=total_duration,
             objective_scores=contributions,
             created_at=run.created_at,
+            declines=list((run.diagnostics or {}).get("declines", [])),
         ),
         message="Schedule retrieved successfully"
     )
@@ -184,7 +191,7 @@ async def mark_complete(
         optimization_run_id=scheduled.optimization_run_id,
         planned_session_id=scheduled.planned_session_id,
         actual_duration=scheduled.scheduled_duration,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=clock.now_utc(),
     )
     db.add(completion_log)
     await db.commit()
@@ -270,7 +277,7 @@ async def release_session(
         )
 
     tz = user_zone(current_user)
-    now = datetime.now(timezone.utc)
+    now = clock.now_utc()
     if now >= session_start(run.start_date, scheduled.time_period, tz):
         raise HTTPException(
             status_code=409,
@@ -342,7 +349,7 @@ async def commit_baseline(
     if target is None:
         raise HTTPException(status_code=404, detail="Plan not found for today")
 
-    now = datetime.now(timezone.utc)
+    now = clock.now_utc()
     for other in runs:  # one baseline per day
         other.baseline_revision = None
     target.baseline_revision = target.plan_revision or 1
@@ -406,7 +413,7 @@ async def partial_reoptimize(
     # 2. Determine the current period in the user's plan-local clock, not the
     # server's UTC clock (docs/METRIC.md §5), and honour the target date: a past
     # day is entirely elapsed, a future day is entirely ahead.
-    now_local = datetime.now(timezone.utc).astimezone(tz)
+    now_local = clock.now_utc().astimezone(tz)
     current_period = (now_local.hour * 60 + now_local.minute) // 15
     day_offset = (target_date - local_today(tz)).days
     if day_offset < 0:
@@ -495,6 +502,7 @@ async def partial_reoptimize(
                     s.value if hasattr(s, "value") else s
                     for s in b.preferred_time_slots
                 ],
+                protected=bool(getattr(b, "is_protected", False)),
             )
             for b in behaviors_db
         ],
@@ -515,6 +523,22 @@ async def partial_reoptimize(
         frozen_periods,
         timeout_seconds=30,
     )
+
+    if solution.status == "protected_conflict":
+        conflict = (solution.diagnostics or {}).get("protected_conflict") or {}
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "protected_conflict",
+                "message": (
+                    "A protected habit cannot be placed in the rest of the day; "
+                    "release a session or shorten the habit."
+                ),
+                "unplaced": conflict.get("unplaced", []),
+                "conflicting": conflict.get("conflicting", []),
+                "minimalRelaxation": conflict.get("minimalRelaxation", []),
+            },
+        )
 
     # 7. Persist as the next revision, keeping session identity (METRIC.md §4).
     # Drafts before the baseline freezes stay revision 1 and retire nothing; a
@@ -541,8 +565,8 @@ async def partial_reoptimize(
         id=new_run_id,
         user_id=current_user.id,
         status="completed" if solution.status == "optimal" else "feasible",
-        # Coarse enum column; the formulation itself is in diagnostics/results.
-        solver="linear",
+        # Variant (full/partial/forced) stays in results + diagnostics.
+        solver="candidate",
         start_date=target_date,
         end_date=target_date,
         time_periods=PERIODS_PER_DAY,

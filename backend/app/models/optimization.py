@@ -26,6 +26,8 @@ class SolverType(str, Enum):
     NONLINEAR = "nonlinear"
     HEURISTIC = "heuristic"
     EVOLUTIONARY = "evolutionary"
+    # The shipped candidate-placement solver (docs/FORMULATION.md).
+    CANDIDATE = "candidate"
 
 
 class OptimizationRun(Base):

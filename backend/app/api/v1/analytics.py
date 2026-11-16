@@ -6,9 +6,10 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends
 
+from app.core import clock
 from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.api.deps import get_db, get_current_active_user
-from app.services.metrics import compute_range, recent_days, user_zone
+from app.services.metrics import compute_range, local_today, recent_days, user_zone
 from app.models import (
     User, 
     Behavior, 
@@ -42,8 +43,9 @@ async def calculate_streak(db: AsyncSession, user_id) -> int:
     if not completion_dates:
         return 0
     
-    # Check if there's activity today or yesterday
-    today = date.today()
+    # Check if there's activity today or yesterday. The streak compares UTC
+    # completion dates, so it uses the same clock without a user zone.
+    today = local_today(timezone.utc)
     yesterday = today - timedelta(days=1)
     
     if completion_dates[0] not in (today, yesterday):
@@ -130,7 +132,7 @@ async def get_dashboard_summary(
     recent_behaviors = [row[0] for row in recent_behaviors_result.all()]
     
     # Today's schedule
-    today = date.today()
+    today = local_today(user_zone(current_user))
     today_schedule_result = await db.execute(
         select(ScheduledBehavior, Behavior)
         .join(Behavior, ScheduledBehavior.behavior_id == Behavior.id)
@@ -245,7 +247,7 @@ async def get_analytics(
         except ValueError:
             days = 7
     
-    start_date = date.today() - timedelta(days=days)
+    start_date = local_today(user_zone(current_user)) - timedelta(days=days)
     
     # Behavior completions by date
     completions_result = await db.execute(

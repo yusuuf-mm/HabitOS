@@ -4,6 +4,8 @@ The metric in docs/METRIC.md counts sessions against a frozen baseline, which on
 works if (a) every session has its own identity, (b) a completion can name that
 identity, and (c) a re-plan is visibly a later revision than the plan it replaced.
 """
+
+from tests_integration.support import plan_day, plan_now
 from datetime import date, datetime, timezone
 from uuid import UUID
 
@@ -17,7 +19,7 @@ def _plan_day():
     the user's day is still running; runs dated with it would not be found by a
     route that asks for today on the user's clock.
     """
-    return datetime.now(timezone.utc).date()
+    return plan_day()
 
 
 
@@ -179,7 +181,7 @@ async def test_completion_can_point_at_one_session(auth_client: AsyncClient, db_
         optimization_run_id=run.id,
         planned_session_id=second.planned_session_id,
         actual_duration=15,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=plan_now(),
     )
     db_session.add(log)
     await db_session.commit()

@@ -1,3 +1,5 @@
+
+from tests_integration.support import plan_day, plan_now
 import pytest
 from datetime import date
 from uuid import UUID
@@ -11,7 +13,7 @@ async def test_get_schedule(auth_client: AsyncClient):
     """Test getting daily schedule."""
     # First we need an optimization run to have a schedule
     # But for a basic test, even an empty one should return 200
-    today = date.today().isoformat()
+    today = plan_day().isoformat()
     response = await auth_client.get(f"/api/v1/schedule?date={today}")
     assert response.status_code == 200
     data = response.json()["data"]
@@ -84,8 +86,8 @@ async def test_mark_complete_for_other_user_returns_404_and_creates_no_log(
         user_id=user_a_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=plan_day(),
+        end_date=plan_day(),
         time_periods=96,
     )
     db_session.add(run)

@@ -8,6 +8,9 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from datetime import datetime, timezone
+
+from app.core.clock import fixed_now
 from app.main import app
 from app.db.database import Base, get_db
 
@@ -88,3 +91,15 @@ async def auth_client(client: AsyncClient) -> AsyncClient:
     token = response.json()["accessToken"]
     client.headers["Authorization"] = f"Bearer {token}"
     return client
+
+
+# A fixed instant for every integration test: noon on a Monday, so "today" is
+# always the same plan-local day and every freeze/revision rule is deterministic.
+PLAN_NOW = datetime(2026, 6, 8, 12, 0, tzinfo=timezone.utc)
+FROZEN_DAY = PLAN_NOW.date()
+
+
+@pytest.fixture(autouse=True)
+def frozen_plan_clock():
+    with fixed_now(PLAN_NOW):
+        yield
