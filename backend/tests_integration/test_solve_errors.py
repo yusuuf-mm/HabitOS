@@ -41,7 +41,7 @@ def _patch_solver(monkeypatch, exc: Exception) -> None:
         def solve(self, problem, optimization_run_id):
             raise exc
 
-    monkeypatch.setattr(optimization_routes, "LinearSolver", _FailingSolver)
+    monkeypatch.setattr(optimization_routes, "CandidateSolver", _FailingSolver)
 
 
 @pytest.mark.asyncio

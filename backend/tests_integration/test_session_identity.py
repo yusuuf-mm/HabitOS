@@ -65,6 +65,9 @@ async def test_replan_increments_plan_revision_on_run_and_sessions(
         start_date=_plan_day(),
         end_date=_plan_day(),
         time_periods=96,
+        # Baseline the day explicitly: the freeze normally happens at 05:00 or at
+        # the first session, so a run written before 05:00 would still be a draft.
+        baseline_revision=1,
         results={"objective_contributions": {"health": {"contribution": 27.0, "weight": 1.0}}},
         total_objective_value=27.0,
     )

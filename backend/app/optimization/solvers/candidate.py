@@ -254,8 +254,6 @@ class CandidateSolver:
                 [],
                 diagnostics={"declines": [], "candidate_count": 0},
                 started=started,
-                frozen_periods=all_frozen,
-                partial=partial,
             )
 
         lp = pulp.LpProblem("candidate_placement", pulp.LpMaximize)
@@ -395,9 +393,7 @@ class CandidateSolver:
                 {
                     "behaviorId": str(behavior.id),
                     "behaviorName": names[behavior.id],
-                    "reason": self._decline_reason(
-                        candidates[b_idx], free_periods, windows[b_idx]
-                    ),
+                    "reason": self._decline_reason(candidates[b_idx], free_periods),
                 }
             )
 
@@ -425,21 +421,19 @@ class CandidateSolver:
             sessions,
             diagnostics=diagnostics,
             started=started,
-            frozen_periods=all_frozen,
-            partial=partial,
         )
 
     @staticmethod
     def _decline_reason(
         candidates: List[Tuple[int, int]],
         free_periods: Set[int],
-        windows: Sequence[Window],
     ) -> str:
         """Why a behaviour is not in the plan.
 
-        Nothing outranks a behaviour in this formulation (there is no protected
-        tier), so a decline is always either "no allowed duration fits the free
-        room" or "the day had no room at all".
+        Nothing outranks a behaviour in this formulation, so a decline is always
+        either "no allowed duration fits the free room" (no candidate at all, or
+        the one that would fit was worth less than its decline cost) or "the day
+        had no room left at all".
         """
         if not candidates:
             return "no_fit"
@@ -449,8 +443,6 @@ class CandidateSolver:
         ):
             # A candidate fits in periods nobody took; the objective ranked its
             # value below the decline cost, i.e. its net value was not positive.
-            return "no_fit"
-        if not windows:
             return "no_fit"
         return "over_capacity"
 
@@ -464,8 +456,6 @@ class CandidateSolver:
         *,
         diagnostics: Dict,
         started: float,
-        frozen_periods: Set[int],
-        partial: bool,
     ) -> OptimizationSolution:
         items = sorted(
             list(frozen_items) + list(sessions), key=lambda item: item.time_period

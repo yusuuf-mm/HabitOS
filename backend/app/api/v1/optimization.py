@@ -55,11 +55,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/optimization", tags=["optimization"])
 
-# Production builds the candidate-placement formulation. The module-level name
-# stays ``LinearSolver`` because callers (and failure-path tests) patch that
-# attribute to substitute a solver; what it resolves to is the shipped model.
-LinearSolver = CandidateSolver
-
 
 async def _load_problem(
     db: AsyncSession, user: User, target_date: date_class
@@ -256,7 +251,7 @@ async def solve_optimization(
 
         # Solve
         optimization_run_id = uuid4()
-        solver = LinearSolver(timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS)
+        solver = CandidateSolver(timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS)
         solution = await run_in_solver_pool(
             solver.solve,
             problem,
@@ -426,7 +421,7 @@ async def forced_include(
             )
         forced_ids = set(request.behaviorIds)
 
-        solver = LinearSolver(timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS)
+        solver = CandidateSolver(timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS)
         timeout = settings.OPTIMIZATION_TIMEOUT_SECONDS
 
         baseline = await run_in_solver_pool(
