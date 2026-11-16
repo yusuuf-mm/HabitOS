@@ -761,13 +761,20 @@ integration conftest now freezes "now" at 2026-06-08 12:00 UTC, with
 `candidate` to `linear`). Both write paths record `candidate`; the solver
 variant stays in results/diagnostics.
 
-**Proven where it could run:** the local Docker daemon is not running on this
-machine, so `tools/migration_cycle.sh` was not run locally. The same script,
+**Proven where it could run:** the local Docker daemon was not running, so
+`tools/migration_cycle.sh` was not run locally at first. The same script,
 extended in this phase to check `is_protected` and the new enum value and to
 downgrade through it, runs in the `Backend Migrations` CI job on
 `postgres:15-alpine`, followed by `alembic downgrade base`, `upgrade head` and
-`alembic check`; that job is green on `c39914a`. Local upgrade/downgrade is
-therefore still unexercised on this machine.
+`alembic check`; that job is green on `c39914a`.
+
+**Local run (follow-up, 2026-11-16):** Docker Desktop was restarted until its
+engine answered (`docker desktop restart`; Server 28.2.2), and the existing
+`postgres-db` container (`postgres:15-alpine`, local images only, no pulls) was
+started. `alembic upgrade head` against `behaviordb` reached
+`b8c9d0e1f2a3 (head)` and the app booted against it; locally the migration is
+therefore exercised upgrade-side. `tools/migration_cycle.sh` itself was not run
+locally; the full downgrade cycle remains the CI job's proof.
 
 ### Step B — docs/ITEMS.md
 
@@ -782,8 +789,9 @@ as data (no scheduler yet), and the AI helper producing a validated
 ### Step C — screens
 
 - **Re-plan:** "Re-plan the rest of my day" on the schedule page, followed by a
-  plain-language diff (kept / moved to HH:MM / dropped / added) computed by id
-  from the before and after schedules.
+  plain-language diff (kept / moved to HH:MM / dropped / added) computed from
+  the before and after schedules. The diff keys on `plannedSessionId` — see the
+  follow-up note below; the row id is per run and cannot be used.
 - **Declines:** the schedule payload now carries the run's `declines`; the UI
   turns reason codes into sentences and offers "What would it cost to fit it?",
   wired to `POST /optimization/forced-include`, reporting the displaced
@@ -802,10 +810,40 @@ Checks: frontend `tsc --noEmit` clean, `npm test` 17 passed (10 new),
 
 **Screens:** the landing page was opened in the real browser
 (`screenshots/phase4-landing-hero.png`); the hero grid is the generated day.
-The authenticated screens (re-plan, declines, release/commit, weights) were
-not opened in a browser: the app needs Postgres, and the local Docker engine is
-down, so there was no backend to sign into. They are covered by component tests
-only, and no before/after screenshots of them exist.
+In the follow-up below the authenticated screens were opened against the local
+Postgres run and photographed; component tests cover them in CI as before.
+
+### Follow-up — re-plan session identity, local Postgres run, screens (2026-11-16)
+
+**Re-plan identity.** `ScheduledBehavior.id` is per run, so keying the "What
+changed" diff on it reported every session as dropped and re-added. The diff
+(`frontend/src/lib/planDiff.ts`) now keys on `plannedSessionId` (falling back to
+the row id). The API surface was the missing piece: the schedule GET and the
+solve response now expose `plannedSessionId`, and
+`backend/tests_integration/test_session_identity.py` pins the contract —
+`test_replan_api_keeps_planned_session_id_while_row_ids_change`. A real re-plan
+against the local Postgres for `demo@example.com` kept all 7 planned sessions
+while every row id changed, with nothing dropped or added and 6 sessions moved;
+the browser re-plan for `shots@example.com` showed the same shape in the UI
+(5 moved, 1 kept, 1 declined as `over_capacity`).
+
+**Local run.** Backend and frontend ran locally against the existing Docker
+`postgres:15-alpine` container (`behaviordb`, migrations at head
+`b8c9d0e1f2a3`); backend health reported `database: connected`. Seed users
+(`demo@example.com`, `shots@example.com`, `tomorrow@example.com`, password
+`DemoPass1`) drove the API and the browser. Solving is by
+`POST /optimization/solve` with `targetDate`; `reoptimize` and `commit` operate
+on plan-local today only.
+
+**Commit 409 is by design.** `resolve_day_plan` freezes the baseline at
+`max(05:00 local, first session start)` (`docs/METRIC.md` §2); the seeded run was
+created after that point, so `POST /schedule/commit` correctly returns 409 for
+today. The release action was exercised in the browser and returned its
+confirmation notice.
+
+**Screens photographed:** `screenshots/phase4-schedule-overview.png`,
+`screenshots/phase4-declines.png` (forced-include cost answer visible),
+`screenshots/phase4-replan-diff.png` and `screenshots/phase4-weights-editor.png`.
 
 ---
 
