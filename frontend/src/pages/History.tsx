@@ -131,8 +131,10 @@ export default function History() {
                     {run.status === "completed" && (
                       <div className="flex items-center gap-1 text-sm">
                         <TrendingUp className="h-4 w-4 text-success" />
+                        {/* Raw weighted impact points x minutes, not a
+                            percentage. */}
                         <span className="font-medium">
-                          {(run.totalScore * 100).toFixed(0)}%
+                          {run.totalScore.toFixed(0)} pts·min
                         </span>
                       </div>
                     )}
@@ -173,9 +175,11 @@ export default function History() {
                   )}
 
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Score</span>
+                    <span className="text-muted-foreground">
+                      Total Objective Value
+                    </span>
                     <span className="font-medium text-foreground">
-                      {(selectedRun.totalScore * 100).toFixed(1)}%
+                      {selectedRun.totalScore.toFixed(1)} pts·min
                     </span>
                   </div>
 
@@ -185,16 +189,11 @@ export default function History() {
                   </div>
 
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Constraints</span>
-                    <span
-                      className={cn(
-                        "font-medium",
-                        selectedRun.constraintsSatisfied === selectedRun.constraintsTotal
-                          ? "text-success"
-                          : "text-warning"
-                      )}
-                    >
-                      {selectedRun.constraintsSatisfied}/{selectedRun.constraintsTotal}
+                    <span className="text-muted-foreground">
+                      Sessions Scheduled
+                    </span>
+                    <span className="font-medium text-foreground">
+                      {selectedRun.scheduledBehaviors.length}
                     </span>
                   </div>
                 </div>
