@@ -809,7 +809,7 @@ Checks: frontend `tsc --noEmit` clean, `npm test` 17 passed (10 new),
 `npm run build` succeeds; backend full suite 121 passed, 1 skipped, 1 xpassed.
 
 **Screens:** the landing page was opened in the real browser
-(`screenshots/phase4-landing-hero.png`); the hero grid is the generated day.
+(`docs/images/phase4-landing-hero.png`); the hero grid is the generated day.
 In the follow-up below the authenticated screens were opened against the local
 Postgres run and photographed; component tests cover them in CI as before.
 
@@ -841,9 +841,9 @@ created after that point, so `POST /schedule/commit` correctly returns 409 for
 today. The release action was exercised in the browser and returned its
 confirmation notice.
 
-**Screens photographed:** `screenshots/phase4-schedule-overview.png`,
-`screenshots/phase4-declines.png` (forced-include cost answer visible),
-`screenshots/phase4-replan-diff.png` and `screenshots/phase4-weights-editor.png`.
+**Screens photographed:** `docs/images/phase4-schedule-overview.png`,
+`docs/images/phase4-declines.png` (forced-include cost answer visible),
+`docs/images/phase4-replan-diff.png` and `docs/images/phase4-weights-editor.png`.
 
 ### Audit fixes — misleading optimization-page numbers (2026-11-17)
 
@@ -894,6 +894,63 @@ returns `progress` as a 0-1 fraction (0.125 each, sum 1.0) and an empty
 `behaviorCompletions` list now maps to the em dash, not NaN%.
 
 ---
+
+## Tidy-up pass (2026-11-17)
+
+Small approved follow-ups, each verified before committing. The solver's
+placement logic is unchanged except for the stability term below.
+
+- **Stability term.** Re-plans now penalise moving carried sessions:
+  `λ = 0.001` per minute shifted from the previous start (distance moved, not
+  moved-or-not), LP objective only — the reported plan value is still the
+  placement value of the emitted sessions. The re-plan route passes each
+  behaviour's earliest not-fully-elapsed session start (in-progress sessions
+  count from now) and the disruption is reported in
+  `diagnostics.stability` (`carried_sessions`, `minutes_shifted`,
+  `penalty_applied`) and in the re-plan response's `disruption`.
+  `docs/FORMULATION.md` gained the term and no longer claims there is no
+  protected tier; it also records that `optimization_runs.solver` is
+  `candidate` now. Tests: a 30-minute shift lands on the closest free start
+  instead of dropping the session, with `solver_objective` below the plan
+  value by exactly the penalty; a full solve reports no `stability`.
+- **Commit-flow integration test.** `test_commit_flow.py` drives one day
+  through the real routes — solve (3 sessions) → commit → complete one →
+  release one → re-plan (carried 3, shifted 0) → squeeze all three into
+  midday → re-plan (drops the lowest-value one) — then asserts
+  `(baseline, completed, released, dropped) = (3, 1, 1, 1)`, rate `0.5`,
+  `vs_feasible` `1.0`, and the same numbers on the dashboard route.
+- **Retire-path fix found by that test.** The re-plan persist loop only
+  visited behaviours present in the new plan, so a behaviour declined
+  outright never got `retired_revision` and system drops could never count
+  through real usage. Missing behaviours' previous sessions are now retired
+  too (frozen days only). Nothing is deleted or renumbered.
+- **Protected-penalty evidence.** A 20-behaviour crowded day (3 protected,
+  ~1,100 min demand over a 05:00–24:00 day, mixed values) solves optimal
+  with 18 sessions, 2 `over_capacity` declines, plan value 636.3, all 3
+  protected placed. The 1,000,000 penalty is ~1,500× any realistic plan
+  value, so the constant stays. Pinned by
+  `test_protected_penalty_holds_on_a_realistic_crowded_day`.
+- **KI-001 fixed.** See `KNOWN_ISSUES.md`: the shared test engine was never
+  disposed and aiosqlite's worker thread is non-daemon, so the process hung
+  in `threading._shutdown` after the summary. A session fixture now
+  disposes the engine; the documented repro exits in ~6 s.
+- **Constraint fields deprecated.** `constraints_satisfied` /
+  `constraints_total` (and their `constraintsSatisfied` / `constraintsTotal`
+  API names) always carried the session count, never a real evaluation.
+  They now return 0, are marked deprecated in the schema, `openapi.yaml`,
+  README and frontend types, and stay present so older clients keep
+  parsing. The UI already shows "Sessions Scheduled" and declines instead.
+- **Mechanical.** Deleted tracked `test_pw.py` (throwaway bcrypt script);
+  moved the six Phase 4 PNGs from `screenshots/` to `docs/images/` and
+  fixed the report references; stopped the leftover uvicorn workers on
+  8001/8002 (backend 8000 kept).
+
+**Real output**
+
+```
+backend:  126 passed, 1 skipped, 1 xpassed in 125.81s
+frontend: 5 files, 20 tests passed; tsc --noEmit clean; build ok (30.13s)
+```
 
 ## Needs a decision
 
