@@ -150,7 +150,7 @@ export const scheduleApi = {
     return apiPost("/schedule/commit");
   },
 
-  async reoptimize(): Promise<ApiResponse<{ new_run_id: string; schedule?: DailySchedule }>> {
+  async reoptimize(): Promise<ApiResponse<{ new_run_id: string; schedule?: DailySchedule; disruption?: { carried_sessions: number; minutes_shifted: number; penalty_applied: number; lambda_per_minute: number } | null }>> {
     return apiPost("/schedule/reoptimize");
   },
 };

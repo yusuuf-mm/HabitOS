@@ -442,6 +442,7 @@ async def partial_reoptimize(
     frozen_periods: dict[int, dict[int, int]] = {}
     behaviors_db = []
     behavior_index_map: dict[UUID, int] = {}
+    previous_starts: dict[int, int] = {}
 
     for sb, behavior in all_items:
         # One problem entry per behaviour, not per scheduled session: a behaviour
@@ -459,6 +460,17 @@ async def partial_reoptimize(
                 frozen_periods.setdefault(idx, {})[t] = (
                     1 if behavior.id in completed_ids else 0
                 )
+
+    for sb, behavior in all_items:
+        # The session each behaviour carries into the re-plan: its earliest
+        # session that has not fully elapsed. In-progress sessions count from
+        # now, so keeping them still reports no disruption.
+        idx = behavior_index_map[behavior.id]
+        local_start = sb.time_period % PERIODS_PER_DAY
+        if local_start + sb.scheduled_duration // 15 > current_period:
+            ref = max(local_start, current_period)
+            if idx not in previous_starts or ref < previous_starts[idx]:
+                previous_starts[idx] = ref
 
     # 5. Build problem
     obj_result = await db.execute(
@@ -523,6 +535,7 @@ async def partial_reoptimize(
         new_run_id,
         frozen_periods,
         timeout_seconds=30,
+        previous_starts=previous_starts,
     )
 
     if solution.status == "protected_conflict":
@@ -607,6 +620,14 @@ async def partial_reoptimize(
             for leftover in previous[len(items):]:
                 leftover.retired_revision = revision
 
+    if frozen:
+        # Behaviours missing from the new plan entirely (declined, not merely
+        # shortened) never enter the loop above; their sessions retire too.
+        for behavior_id, previous in previous_by_behavior.items():
+            if behavior_id not in items_by_behavior:
+                for leftover in previous:
+                    leftover.retired_revision = revision
+
     await db.commit()
 
     # 8. Broadcast + return
@@ -627,6 +648,7 @@ async def partial_reoptimize(
             "new_run_id": str(new_run_id),
             "status": solution.status,
             "schedule": schedule,
+            "disruption": (solution.diagnostics or {}).get("stability"),
         },
         message="Partial re-optimization completed",
     )

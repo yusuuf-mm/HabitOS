@@ -342,3 +342,97 @@ def test_protected_conflict_cases_mirroring_the_oracle():
                 if behaviour.protected:
                     assert behaviour.id in scheduled
         assert validate_schedule(problem, solution.schedule_items) == []
+
+
+# ---------------------------------------------------------------------------
+# Stability: a re-plan keeps sessions still unless moving earns its keep.
+# ---------------------------------------------------------------------------
+
+
+def test_a_slight_move_beats_dropping_the_session():
+    from app.optimization.solvers.candidate import STABILITY_LAMBDA_PER_MINUTE
+
+    behavior = _behavior("Run", lo=30, hi=30, slots=("morning",))
+    problem = _problem([behavior])
+    # 07:00-08:00 has elapsed, so the previous 07:30 start is gone; the rest
+    # of the morning is free.
+    frozen = {0: {t: 0 for t in range(28, 32)}}
+    solution = CandidateSolver(timeout_seconds=10).solve_partial_day(
+        problem, uuid4(), frozen, previous_starts={0: 30}
+    )
+
+    assert solution.status == "optimal"
+    declined = {d["behaviorId"] for d in solution.diagnostics["declines"]}
+    assert str(behavior.id) not in declined, (
+        "a 30-minute shift must not drop the session"
+    )
+    assert [(i.time_period, i.scheduled_duration) for i in solution.schedule_items] == [
+        (32, 30)
+    ], "the closest free start wins"
+
+    stability = solution.diagnostics["stability"]
+    assert stability["carried_sessions"] == 1
+    assert stability["minutes_shifted"] == 30
+    assert stability["penalty_applied"] == pytest.approx(
+        30 * STABILITY_LAMBDA_PER_MINUTE
+    )
+
+    # The penalty steered the LP only: the reported value is the placement
+    # value of the emitted sessions, nothing less.
+    expected = total_objective_value(
+        problem.objectives,
+        {b.id: b for b in problem.behaviors},
+        solution.schedule_items,
+    )
+    assert solution.total_objective_value == pytest.approx(expected)
+    assert solution.diagnostics["solver_objective"] == pytest.approx(
+        expected - 30 * STABILITY_LAMBDA_PER_MINUTE
+    )
+    assert validate_schedule(problem, solution.schedule_items) == []
+
+
+def test_a_full_solve_reports_no_stability():
+    solution = CandidateSolver(timeout_seconds=10).solve(
+        _problem([_behavior()]), uuid4()
+    )
+    assert "stability" not in solution.diagnostics
+
+
+def test_protected_penalty_holds_on_a_realistic_crowded_day():
+    """Twenty behaviours, more demand than day: the protected three stay in.
+
+    Demand (~1,100 min) exceeds the 05:00-24:00 day, so something must give.
+    The 1,000,000 decline penalty must keep all three protected habits placed
+    while the flexible ones take the declines with reasons.
+    """
+    from app.optimization.solvers.candidate import PROTECTED_DECLINE_PENALTY
+
+    slots = ("morning", "midday", "afternoon", "evening", "night")
+    behaviours = [
+        _protected(f"Protected {i}", lo=45, hi=60, slots=(slots[i % len(slots)],))
+        for i in range(3)
+    ]
+    for i in range(17):
+        behaviours.append(
+            _behavior(
+                f"Flexible {i}",
+                lo=30,
+                hi=90,
+                slots=(slots[i % len(slots)],),
+                impacts={"health": 0.3 + (i % 5) * 0.2, "learning": 0.5},
+            )
+        )
+    problem = _problem(behaviours, objectives={"health": 0.6, "learning": 0.4})
+    solution = CandidateSolver(timeout_seconds=30).solve(problem, uuid4())
+
+    assert solution.status == "optimal", solution.diagnostics.get("declines")
+    scheduled = {item.behavior_id for item in solution.schedule_items}
+    for behaviour in behaviours[:3]:
+        assert behaviour.id in scheduled, f"{behaviour.name} was dropped"
+    declines = solution.diagnostics["declines"]
+    assert declines, "an over-capacity day must decline something"
+    assert {d["reason"] for d in declines} <= {"over_capacity", "no_fit"}
+    assert len(solution.schedule_items) + len(declines) == len(behaviours)
+    # The penalty dwarfs any plan value, which is why "protected" sticks.
+    assert solution.total_objective_value < PROTECTED_DECLINE_PENALTY / 100
+    assert validate_schedule(problem, solution.schedule_items) == []

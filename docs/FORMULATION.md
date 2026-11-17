@@ -72,21 +72,35 @@ solver, so the model never sees a fragment.
 7. **Forced include**: a forced behaviour gets `z[b] = 0` and `Σ y[c] = 1`; if it
    has no candidate at all the solve is infeasible with a message naming it.
 
-There is no protected tier in the shipped model: every active behaviour may be
-declined, and the reason is always reported. The prototype's protected/protected-
-conflict experiments remain in `tools/candidate_model.py` for the oracle.
+Protected habits are placed first through the objective (§Objective):
+declining one costs `PROTECTED_DECLINE_PENALTY` (1,000,000), so a residual
+decline is a `protected_conflict`, never a preference. The prototype's
+protected/protected-conflict experiments remain in `tools/candidate_model.py`
+for the oracle.
 
 ## Objective
 
 ```
 Σ_b Σ_{c ∈ C_b} y[c] · duration(c) · impact(b, objective) · weight(objective)
   −  Σ_b z[b] · decline_penalty(b)
+  −  Σ_{b carried} Σ_{c ∈ C_b} y[c] · λ · |start(c) − prev_b|
 ```
 
 `decline_penalty(b) = max(0, score(b)) · min_duration(b) + 0.001`, so declining
 costs at least what the shortest session would have earned, plus a tie-break that
 places a zero-value behaviour when there is room. A behaviour with negative net
-value is declined on purpose.
+value is declined on purpose. A protected behaviour instead pays
+`decline_penalty(b) = PROTECTED_DECLINE_PENALTY` (1,000,000): more than any
+schedule can be worth, so the model places every protected habit it can.
+
+The third term is the **stability term**, re-plans only. Each carried session
+pays `λ = 0.001` per minute its start moves from the previous plan's start —
+distance moved, not moved-or-not — so a slight shift still beats being dropped
+and, among near-equal placements, the stillest plan wins. Like the decline
+penalties it steers the LP only: the reported plan value is the placement value
+of the emitted sessions, and the disruption is reported separately in
+`diagnostics.stability` (`carried_sessions`, `minutes_shifted`,
+`penalty_applied`) and in the re-plan response's `disruption`.
 
 That penalised quantity is what the solver maximises, but it is **not** the value
 of the plan. The value reported to users is the placement value of the emitted
@@ -126,8 +140,9 @@ zero.
 - `no_fit` — no candidate fits the remaining free periods.
 - `over_capacity` — candidates exist, but every one of them overlaps periods other
   sessions took: the day is full.
-- `preempted_by_protected` — only reachable in the prototype's protected tier;
-  the shipped model never emits it.
+- `preempted_by_protected` — reserved for the prototype's oracle runs; the
+  shipped model reports a missed protected habit as `protected_conflict`
+  instead, so decline reasons stay `no_fit` / `over_capacity`.
 
 The reason is computed after the solve from the emitted schedule, so it describes
 the plan the user actually receives. Every plan lists its declines in
@@ -164,10 +179,12 @@ Every plan carries:
 | `declines`, `declines_count` | reason codes per declined behaviour |
 | `objective_weights` | raw and normalised weights used |
 | `frozen_periods_count`, `earliest_free_period` | present only on a re-plan |
+| `stability` | present only on a re-plan with carried sessions (see §Objective) |
+| `protected_conflict` | present only on a conflict: `unplaced`, `conflicting`, `minimalRelaxation` |
 
-`optimization_runs.solver` is a coarse enum column (`linear`, `heuristic`, …) and
-stays `linear`; the formulation is recorded in `results.solver` and in
-`diagnostics.formulation`.
+`optimization_runs.solver` records `candidate` (migration `b8c9d0e1f2a3` added
+the value); the variant (`candidate`, `candidate_partial`, `candidate_forced`)
+stays in `results.solver`, and `diagnostics.formulation` says `candidate`.
 
 ## Evidence
 

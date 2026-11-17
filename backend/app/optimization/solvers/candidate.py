@@ -58,6 +58,12 @@ DECLINE_TIE_BREAK = 1e-3
 # model places every protected habit it can and a residual decline is a conflict,
 # not a preference.
 PROTECTED_DECLINE_PENALTY = 1_000_000.0
+# Re-plans prefer to leave sessions where they were: each carried session pays
+# this per minute it moves from its previous start. At 0.001/min even a whole
+# morning's shift (≈200 min → 0.2) is far below a typical decline penalty
+# (tens), so stability breaks near-ties instead of dropping sessions. It steers
+# the LP objective only; the reported plan value never includes it.
+STABILITY_LAMBDA_PER_MINUTE = 0.001
 
 Window = Tuple[int, int]  # half-open period range
 
@@ -157,10 +163,21 @@ class CandidateSolver:
         problem: OptimizationProblem,
         optimization_run_id: UUID,
         frozen_periods: Dict[int, Dict[int, int]],
+        previous_starts: Optional[Dict[int, int]] = None,
     ) -> OptimizationSolution:
-        """Re-solve the future with every elapsed period pinned to its record."""
+        """Re-solve the future with every elapsed period pinned to its record.
+
+        *previous_starts* maps a behaviour index to the start period of its
+        session in the plan being replaced. Carried sessions pay
+        ``STABILITY_LAMBDA_PER_MINUTE`` per minute they move from that start,
+        so the re-plan keeps sessions still unless moving earns its keep.
+        """
         return self._solve(
-            problem, optimization_run_id, frozen_periods=frozen_periods, forced_ids=()
+            problem,
+            optimization_run_id,
+            frozen_periods=frozen_periods,
+            forced_ids=(),
+            previous_starts=previous_starts,
         )
 
     def solve_forced(
@@ -188,11 +205,13 @@ class CandidateSolver:
         frozen_periods: Optional[Dict[int, Dict[int, int]]],
         forced_ids: Set[str],
         solver_name: Optional[str] = None,
+        previous_starts: Optional[Dict[int, int]] = None,
     ) -> OptimizationSolution:
         started = time.perf_counter()
         partial = frozen_periods is not None
         frozen_periods = frozen_periods or {}
         forced = forced_ids
+        previous_starts = previous_starts or {}
 
         if len(problem.behaviors) > MAX_BEHAVIORS:
             raise SolverError(
@@ -273,8 +292,18 @@ class CandidateSolver:
         for b_idx in eligible:
             behavior = problem.behaviors[b_idx]
             score = _score(behavior, problem.objectives)
-            for index, (_start, length) in enumerate(candidates[b_idx]):
+            previous = previous_starts.get(b_idx)
+            for index, (start, length) in enumerate(candidates[b_idx]):
                 objective.append(y[(b_idx, index)] * length * MINUTES_PER_PERIOD * score)
+                if previous is not None:
+                    # Distance moved, not moved-or-not: a slight shift costs
+                    # slightly, so it still beats being dropped.
+                    shift_minutes = abs(start - previous) * MINUTES_PER_PERIOD
+                    objective.append(
+                        -y[(b_idx, index)]
+                        * STABILITY_LAMBDA_PER_MINUTE
+                        * shift_minutes
+                    )
             penalty = (
                 PROTECTED_DECLINE_PENALTY
                 if behavior.protected
@@ -410,6 +439,28 @@ class CandidateSolver:
             problem, candidates, sessions, declined_ids
         )
 
+        stability: Optional[Dict] = None
+        if previous_starts:
+            index_of = {b.id: i for i, b in enumerate(problem.behaviors)}
+            carried: Set[int] = set()
+            minutes_shifted = 0
+            for item in sessions:
+                b_idx = index_of.get(item.behavior_id)
+                if b_idx is None or b_idx not in previous_starts:
+                    continue
+                carried.add(b_idx)
+                minutes_shifted += (
+                    abs(item.time_period - previous_starts[b_idx]) * MINUTES_PER_PERIOD
+                )
+            stability = {
+                "lambda_per_minute": STABILITY_LAMBDA_PER_MINUTE,
+                "carried_sessions": len(carried),
+                "minutes_shifted": minutes_shifted,
+                "penalty_applied": round(
+                    STABILITY_LAMBDA_PER_MINUTE * minutes_shifted, 4
+                ),
+            }
+
         diagnostics = {
             "solver_status": status_name,
             "solve_status": (
@@ -426,6 +477,8 @@ class CandidateSolver:
         }
         if conflict:
             diagnostics["protected_conflict"] = conflict
+        if stability is not None:
+            diagnostics["stability"] = stability
         if forced:
             diagnostics["forced_behavior_ids"] = sorted(forced)
         if partial:
