@@ -16,7 +16,9 @@ from app.models import (
     CompletionLog,
 )
 from app.models.telemetry import HabitTelemetry
+from app.core import clock
 from app.core.constants import MINUTES_PER_PERIOD, PERIODS_PER_DAY
+from app.services.metrics import local_today, user_zone
 from app.schemas.api import ApiResponse
 
 logger = logging.getLogger(__name__)
@@ -154,7 +156,7 @@ async def aggregate_daily_telemetry(
     if target_date:
         snap_date = datetime.strptime(target_date, "%Y-%m-%d").date()
     else:
-        snap_date = date.today() - timedelta(days=1)
+        snap_date = local_today(user_zone(current_user)) - timedelta(days=1)
 
     metrics = await _aggregate_day(db, current_user.id, snap_date)
 
@@ -170,7 +172,7 @@ async def aggregate_daily_telemetry(
     if existing:
         for k, v in metrics.items():
             setattr(existing, k, v)
-        existing.created_at = datetime.now(timezone.utc)
+        existing.created_at = clock.now_utc()
     else:
         telemetry = HabitTelemetry(user_id=current_user.id, snapshot_date=snap_date, **metrics)
         db.add(telemetry)
@@ -191,7 +193,7 @@ async def get_telemetry_trend(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Return the last N days of telemetry (most recent first)."""
-    cutoff = date.today() - timedelta(days=days)
+    cutoff = local_today(user_zone(current_user)) - timedelta(days=days)
     result = await db.execute(
         select(HabitTelemetry)
         .where(

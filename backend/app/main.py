@@ -6,11 +6,13 @@ from typing import Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.core import settings, BehaviorOptimizationException
 from app.core.exceptions import ValidationError, DatabaseError
-from app.db.database import init_db, close_db
+from app.db.database import close_db, async_session_maker
+from app.optimization.executor import shutdown_pool
 from app.api.v1 import (
     auth_router,
     behaviors_router,
@@ -44,6 +46,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     logger.info("Shutting down application")
+    shutdown_pool()
     await close_db()
     logger.info("Database connection closed")
 
@@ -52,7 +55,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Operations Research + AI Engineering for Behavioral Optimization",
+    description="Constraint-based daily planner with partial-day re-optimization",
     lifespan=lifespan,
 )
 
@@ -152,8 +155,23 @@ async def root():
 
 
 @app.get("/api/health", response_model=HealthCheckResponse, tags=["health"])
-async def health_check():
-    """Health check endpoint."""
+async def health_check() -> HealthCheckResponse:
+    """Health check that actually queries the database."""
+    try:
+        async with async_session_maker() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        logger.warning("Health check: database unavailable", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "version": settings.APP_VERSION,
+                "environment": settings.ENVIRONMENT,
+                "database": "unavailable",
+            },
+        )
+
     return HealthCheckResponse(
         status="healthy",
         version=settings.APP_VERSION,

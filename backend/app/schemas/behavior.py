@@ -8,6 +8,12 @@ from app.models.behavior import BehaviorCategory, TimeSlot
 from app.core.constants import longest_contiguous_minutes_for_time_slots
 
 
+class ObjectiveWeightUpdate(BaseModel):
+    """A new weight for one objective; the set is renormalised on write."""
+
+    weight: float = Field(..., ge=0.0, le=100.0)
+
+
 class ObjectiveImpactCreate(BaseModel):
     """Behavior impact creation schema."""
 
@@ -33,12 +39,15 @@ class BehaviorCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=500)
     category: BehaviorCategory = Field(...)
-    energyCost: int = Field(..., ge=1, le=10, validation_alias="energyCost")
+    # Dormant: kept so existing rows and clients keep working, no longer
+    # modelled by the planner.
+    energyCost: int = Field(5, ge=1, le=10, validation_alias="energyCost")
     durationMin: int = Field(..., gt=0, validation_alias="durationMin")
     durationMax: int = Field(..., gt=0, validation_alias="durationMax")
     preferredTimeSlots: List[TimeSlot] = Field(default_factory=lambda: [TimeSlot.FLEXIBLE], validation_alias="preferredTimeSlots")
     objectiveImpacts: List[ObjectiveImpactCreate] = Field(default_factory=list, validation_alias="objectiveImpacts")
     isActive: bool = Field(default=True, validation_alias="isActive")
+    isProtected: bool = Field(default=False, validation_alias="isProtected")
     frequency: str = Field("daily")
     frequencyCount: Optional[int] = Field(None, validation_alias="frequencyCount")
 
@@ -74,6 +83,7 @@ class BehaviorUpdate(BaseModel):
     preferredTimeSlots: Optional[List[TimeSlot]] = Field(None, validation_alias="preferredTimeSlots")
     objectiveImpacts: Optional[List[ObjectiveImpactCreate]] = Field(None, validation_alias="objectiveImpacts")
     isActive: Optional[bool] = Field(None, validation_alias="isActive")
+    isProtected: Optional[bool] = Field(None, validation_alias="isProtected")
     frequency: Optional[str] = None
     frequencyCount: Optional[int] = Field(None, validation_alias="frequencyCount")
 
@@ -113,6 +123,7 @@ class BehaviorResponse(BaseModel):
     preferred_time_slots: List[TimeSlot] = Field(..., serialization_alias="preferredTimeSlots")
     objective_impacts: List[ObjectiveImpactResponse] = Field(default_factory=list, serialization_alias="objectiveImpacts")
     is_active: bool = Field(..., serialization_alias="isActive")
+    is_protected: bool = Field(False, serialization_alias="isProtected")
     frequency: str = Field(..., serialization_alias="frequency")
     frequency_count: Optional[int] = Field(None, serialization_alias="frequencyCount")
     created_at: datetime = Field(..., serialization_alias="createdAt")

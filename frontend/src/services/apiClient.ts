@@ -82,6 +82,13 @@ export const behaviorsApi = {
   async getObjectives(): Promise<ApiResponse<Objective[]>> {
     return apiGet("/behaviors/objectives");
   },
+
+  async updateObjectiveWeight(
+    objectiveId: string,
+    weight: number,
+  ): Promise<ApiResponse<Objective[]>> {
+    return apiPut(`/behaviors/objectives/${objectiveId}`, { weight });
+  },
 };
 
 // =============================================================================
@@ -101,6 +108,13 @@ export const optimizationApi = {
 
   async getOptimizationRun(id: string): Promise<ApiResponse<OptimizationRun>> {
     return apiGet(`/optimization/history/${id}`);
+  },
+
+  async forcedInclude(
+    behaviorIds: string[],
+    targetDate?: string,
+  ): Promise<ApiResponse<ForcedIncludeResult>> {
+    return apiPost("/optimization/forced-include", { behaviorIds, targetDate });
   },
 };
 
@@ -124,6 +138,20 @@ export const scheduleApi = {
     scheduledBehaviorId: string,
   ): Promise<ApiResponse<{ message: string }>> {
     return apiPost(`/schedule/${scheduledBehaviorId}/incomplete`);
+  },
+
+  async releaseSession(
+    scheduledBehaviorId: string,
+  ): Promise<ApiResponse<{ released_at: string }>> {
+    return apiPost(`/schedule/${scheduledBehaviorId}/release`);
+  },
+
+  async commitDay(): Promise<ApiResponse<{ committed_at?: string; message?: string }>> {
+    return apiPost("/schedule/commit");
+  },
+
+  async reoptimize(): Promise<ApiResponse<{ new_run_id: string; schedule?: DailySchedule; disruption?: { carried_sessions: number; minutes_shifted: number; penalty_applied: number; lambda_per_minute: number } | null }>> {
+    return apiPost("/schedule/reoptimize");
   },
 };
 

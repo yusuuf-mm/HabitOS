@@ -267,11 +267,12 @@ export function ScheduleView({
         </div>
       )}
 
-      {/* Objective Scores */}
+      {/* Objective Scores: these are shares of the run objective value,
+          not weights or progress toward a goal. */}
       {schedule.objectiveScores.length > 0 && (
         <div className="rounded-xl border border-border/40 p-5 space-y-4">
           <h4 className="text-sm font-medium text-foreground">
-            Today&apos;s Objective Progress
+            Today&apos;s Objective Value Share
           </h4>
           <div className="grid gap-3 sm:grid-cols-2">
             {schedule.objectiveScores.map((obj) => (

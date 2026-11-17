@@ -17,6 +17,9 @@ class BehaviorScheduleInput:
     energy_cost: float
     impacts: Dict[str, float]
     preferred_time_slots: List[str] = field(default_factory=list)
+    # Protected habits are placed first; a plan that cannot place all of them is
+    # a protected conflict, never a silent drop.
+    protected: bool = False
 
 
 @dataclass
@@ -105,7 +108,13 @@ class OptimizationSolution:
 
     def __post_init__(self):
         """Validate solution."""
-        if self.status not in ["optimal", "feasible", "infeasible", "unbounded"]:
+        if self.status not in [
+            "optimal",
+            "feasible",
+            "infeasible",
+            "protected_conflict",
+            "unbounded",
+        ]:
             raise ValueError(f"Invalid status: {self.status}")
 
     @property

@@ -62,13 +62,24 @@ export default function Dashboard() {
       accentColor: "info" as const,
     },
     {
-      title: "Completion Rate",
-      value: `${(summary.stats.completionRate * 100).toFixed(0)}%`,
-      subtitle: "This week",
+      title: "Kept my plan",
+      value:
+        summary.stats.completionRate === null
+          ? "—"
+          : `${(summary.stats.completionRate * 100).toFixed(0)}%`,
+      subtitle: `${summary.stats.released} released · ${summary.stats.systemDropped} dropped`,
       icon: CheckCircle2,
-      trend: "up" as const,
-      trendValue: "+5%",
       accentColor: "success" as const,
+    },
+    {
+      title: "Handled the day",
+      value:
+        summary.stats.completionRateVsFeasible === null
+          ? "—"
+          : `${(summary.stats.completionRateVsFeasible * 100).toFixed(0)}%`,
+      subtitle: "Of the sessions the plan could actually fit",
+      icon: CheckCircle2,
+      accentColor: "info" as const,
     },
     {
       title: "Current Streak",

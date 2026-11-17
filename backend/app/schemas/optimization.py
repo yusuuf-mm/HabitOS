@@ -30,6 +30,11 @@ class ScheduledBehaviorResponse(BaseModel):
     startTime: str = Field(..., validation_alias="start_time", serialization_alias="startTime")  # HH:mm
     endTime: str = Field(..., validation_alias="end_time", serialization_alias="endTime")    # HH:mm
     duration: int
+    # Stable across re-plans; the row id above is per run. Clients that compare
+    # two plans must key on this one (docs/METRIC.md §4).
+    plannedSessionId: UUID = Field(
+        ..., validation_alias="planned_session_id", serialization_alias="plannedSessionId"
+    )
     isCompleted: bool = Field(False, validation_alias="is_completed", serialization_alias="isCompleted")
     completedAt: Optional[datetime] = Field(None, validation_alias="completed_at", serialization_alias="completedAt")
 
@@ -70,8 +75,8 @@ class OptimizationRunResponse(BaseModel):
     objectiveContributions: List[ObjectiveContributionSchema] = Field(default_factory=list, validation_alias="objective_contributions", serialization_alias="objectiveContributions")
     totalScore: float = Field(0.0, validation_alias="total_score", serialization_alias="totalScore")
     executionTimeMs: int = Field(0, validation_alias="execution_time_ms", serialization_alias="executionTimeMs")
-    constraintsSatisfied: int = Field(0, validation_alias="constraints_satisfied", serialization_alias="constraintsSatisfied")
-    constraintsTotal: int = Field(0, validation_alias="constraints_total", serialization_alias="constraintsTotal")
+    constraintsSatisfied: int = Field(0, validation_alias="constraints_satisfied", serialization_alias="constraintsSatisfied", deprecated=True, description="Deprecated: always 0. No real constraint count exists; see the schedule's declines and session counts instead.")
+    constraintsTotal: int = Field(0, validation_alias="constraints_total", serialization_alias="constraintsTotal", deprecated=True, description="Deprecated: always 0. Kept so older clients keep parsing; see the schedule's declines and session counts instead.")
     createdAt: datetime = Field(..., validation_alias="created_at", serialization_alias="createdAt")
     completedAt: Optional[datetime] = Field(None, validation_alias="completed_at", serialization_alias="completedAt")
 
@@ -98,6 +103,45 @@ class OptimizationHistoryResponse(BaseModel):
 
 from .schedule import DailySchedule
 OptimizationResult.update_forward_refs()
+
+
+class ForcedIncludeRequest(BaseModel):
+    """Which behaviours to force into the day."""
+
+    targetDate: Optional[date] = None
+    behaviorIds: List[UUID] = Field(default_factory=list)
+
+
+class ForcedSession(BaseModel):
+    """A session the forced-include solve placed."""
+
+    behaviorId: UUID
+    behaviorName: str
+    startTime: str
+    endTime: str
+    duration: int
+
+
+class DisplacedSession(BaseModel):
+    """A session that had to give way to fit the requested behaviours."""
+
+    behaviorId: UUID
+    behaviorName: str
+    reason: str
+    minutes: int
+
+
+class ForcedIncludeResult(BaseModel):
+    """The cost of fitting the requested behaviours into the day."""
+
+    fits: bool
+    forced: List[ForcedSession] = Field(default_factory=list)
+    displaced: List[DisplacedSession] = Field(default_factory=list)
+    relaxations: List[Dict[str, Any]] = Field(default_factory=list)
+    objectiveChange: float = 0.0
+    solverObjective: Optional[float] = None
+    seconds: float = 0.0
+    reason: Optional[str] = None
 
 
 class InfeasibilityDiagnostics(BaseModel):

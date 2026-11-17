@@ -29,6 +29,8 @@ export interface ScheduledBehavior {
   startTime: string; // HH:mm format
   endTime: string;
   duration: number; // minutes
+  // Stable across re-plans; `id` is per run and must not be used as identity.
+  plannedSessionId: string;
   isCompleted: boolean;
   completedAt?: string;
 }
@@ -42,7 +44,9 @@ export interface OptimizationRun {
   objectiveContributions: ObjectiveContribution[];
   totalScore: number;
   executionTimeMs: number;
+  /** @deprecated Always 0. No real constraint count exists; use declines and scheduledBehaviors.length. */
   constraintsSatisfied: number;
+  /** @deprecated Always 0. Kept so older clients keep parsing. */
   constraintsTotal: number;
   createdAt: string;
   completedAt?: string;
@@ -65,7 +69,8 @@ export interface DailySchedule {
   date: string;
   scheduledBehaviors: ScheduledBehavior[];
   totalDuration: number;
-  totalEnergySpent: number;
   objectiveScores: ObjectiveContribution[];
   createdAt: string;
+  // Present on the schedule endpoint; why the planner left habits out.
+  declines?: Array<{ behaviorId: string; behaviorName: string; reason: string }>;
 }

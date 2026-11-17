@@ -12,7 +12,18 @@ class DashboardStats(BaseModel):
     totalBehaviors: int = Field(..., validation_alias="total_behaviors", serialization_alias="totalBehaviors")
     activeBehaviors: int = Field(..., validation_alias="active_behaviors", serialization_alias="activeBehaviors")
     totalOptimizationRuns: int = Field(..., validation_alias="total_optimization_runs", serialization_alias="totalOptimizationRuns")
-    completionRate: float = Field(..., validation_alias="completion_rate", serialization_alias="completionRate")
+    # Nullable: a week whose denominator is zero reports null, not 1.0 or 0.0
+    # (docs/METRIC.md §8).
+    completionRate: float | None = Field(None, validation_alias="completion_rate", serialization_alias="completionRate")
+    # Shown beside the rate: released sessions left the denominator, dropped ones
+    # stayed in it (docs/METRIC.md §1).
+    released: int = Field(0, validation_alias="released", serialization_alias="released")
+    systemDropped: int = Field(0, validation_alias="system_dropped", serialization_alias="systemDropped")
+    completionRateVsFeasible: float | None = Field(
+        None,
+        validation_alias="completion_rate_vs_feasible",
+        serialization_alias="completionRateVsFeasible",
+    )
     averageScore: float = Field(..., validation_alias="average_score", serialization_alias="averageScore")
     streakDays: int = Field(..., validation_alias="streak_days", serialization_alias="streakDays")
 
@@ -67,7 +78,13 @@ class BehaviorCompletion(BaseModel):
 
 
 class ObjectiveProgress(BaseModel):
-    """Objective progress data."""
+    """An objective's share of the user's objective weights (0-1 fraction).
+
+    This is not observed progress toward a goal: it is the configured weight
+    from ``Objective.weight`` (normalised to sum to 1), so 0.125 means the
+    objective carries a 12.5% share of the optimisation objective. The trend
+    is currently hardcoded "stable" in the API; it is not a measured trend.
+    """
 
     objectiveName: str = Field(..., validation_alias="objective_name", serialization_alias="objectiveName")
     progress: float
@@ -85,17 +102,6 @@ class CategoryDistribution(BaseModel):
     percentage: float
 
 
-class EnergyUsage(BaseModel):
-    """Energy usage data."""
-
-    date: date
-    energySpent: int = Field(..., validation_alias="energy_spent", serialization_alias="energySpent")
-    energyBudget: int = Field(..., validation_alias="energy_budget", serialization_alias="energyBudget")
-
-    class Config:
-        populate_by_name = True
-
-
 class AnalyticsData(BaseModel):
     """Analytics data."""
 
@@ -103,7 +109,6 @@ class AnalyticsData(BaseModel):
     behaviorCompletions: List[BehaviorCompletion] = Field(..., validation_alias="behavior_completions", serialization_alias="behaviorCompletions")
     objectiveProgress: List[ObjectiveProgress] = Field(..., validation_alias="objective_progress", serialization_alias="objectiveProgress")
     categoryDistribution: List[CategoryDistribution] = Field(..., validation_alias="category_distribution", serialization_alias="categoryDistribution")
-    energyUsage: List[EnergyUsage] = Field(..., validation_alias="energy_usage", serialization_alias="energyUsage")
 
     class Config:
         populate_by_name = True

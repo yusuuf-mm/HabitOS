@@ -8,6 +8,9 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from datetime import datetime, timezone
+
+from app.core.clock import fixed_now
 from app.main import app
 from app.db.database import Base, get_db
 
@@ -25,6 +28,19 @@ TestingSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+
+# Teardown below is sync (asyncio.run), so session scope needs no event loop.
+@pytest.fixture(scope="session", autouse=True)
+def dispose_test_engine():
+    """Close the shared engine so the process can exit (KI-001).
+
+    The engine lives for the whole session on a StaticPool, and aiosqlite's
+    connection worker is a non-daemon thread: without dispose the interpreter
+    waits for it forever after the summary prints.
+    """
+    yield
+    asyncio.run(engine.dispose())
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -88,3 +104,15 @@ async def auth_client(client: AsyncClient) -> AsyncClient:
     token = response.json()["accessToken"]
     client.headers["Authorization"] = f"Bearer {token}"
     return client
+
+
+# A fixed instant for every integration test: noon on a Monday, so "today" is
+# always the same plan-local day and every freeze/revision rule is deterministic.
+PLAN_NOW = datetime(2026, 6, 8, 12, 0, tzinfo=timezone.utc)
+FROZEN_DAY = PLAN_NOW.date()
+
+
+@pytest.fixture(autouse=True)
+def frozen_plan_clock():
+    with fixed_now(PLAN_NOW):
+        yield

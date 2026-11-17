@@ -7,7 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
+from app.core import clock
 from app.core.constants import period_to_time, PERIODS_PER_DAY
+from app.services.metrics import (
+    day_runs,
+    local_today,
+    resolve_day_plan,
+    session_start,
+    user_zone,
+)
 from app.api.deps import get_db, get_current_active_user
 from app.models import User, ScheduledBehavior, OptimizationRun, Behavior, CompletionLog
 from app.schemas.api import ApiResponse
@@ -29,7 +37,11 @@ async def get_daily_schedule(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Get daily schedule."""
-    target_date = datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
+    target_date = (
+        datetime.strptime(date_str, "%Y-%m-%d").date()
+        if date_str
+        else local_today(user_zone(current_user))
+    )
 
     # 1. Find active run covering the date
     result = await db.execute(
@@ -51,9 +63,9 @@ async def get_daily_schedule(
                 date=target_date,
                 scheduled_behaviors=[],
                 total_duration=0,
-                total_energy_spent=0,
                 objective_scores=[],
-                created_at=datetime.now(timezone.utc),
+                created_at=clock.now_utc(),
+                declines=[],
             ),
             message="No schedule found for this date"
         )
@@ -71,7 +83,6 @@ async def get_daily_schedule(
 
     response_items = []
     total_duration = 0
-    total_energy = 0
     
     completion_result = await db.execute(
         select(CompletionLog.optimization_run_id, CompletionLog.behavior_id)
@@ -102,11 +113,11 @@ async def get_daily_schedule(
                     startTime=start_time,
                     endTime=end_time,
                     duration=sb.scheduled_duration,
+                    plannedSessionId=sb.planned_session_id,
                     isCompleted=is_completed,
                 )
             )
             total_duration += sb.scheduled_duration
-            total_energy += behavior.energy_cost
 
     # Reconstruct contributions for objective_scores.
     # Percentage is computed from contribution / total objective value.
@@ -134,9 +145,9 @@ async def get_daily_schedule(
             date=target_date,
             scheduled_behaviors=response_items,
             total_duration=total_duration,
-            total_energy_spent=int(total_energy),
             objective_scores=contributions,
             created_at=run.created_at,
+            declines=list((run.diagnostics or {}).get("declines", [])),
         ),
         message="Schedule retrieved successfully"
     )
@@ -179,8 +190,9 @@ async def mark_complete(
         user_id=current_user.id,
         behavior_id=scheduled.behavior_id,
         optimization_run_id=scheduled.optimization_run_id,
+        planned_session_id=scheduled.planned_session_id,
         actual_duration=scheduled.scheduled_duration,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=clock.now_utc(),
     )
     db.add(completion_log)
     await db.commit()
@@ -234,6 +246,128 @@ async def mark_incomplete(
     )
 
 
+@router.post("/{scheduled_behavior_id}/release", response_model=ApiResponse[dict])
+async def release_session(
+    scheduled_behavior_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Withdraw a session before it starts (docs/METRIC.md §3.2).
+
+    A released session leaves the completion-rate denominator and is reported
+    beside the rate. After the session has started it can only be missed.
+    """
+    result = await db.execute(
+        select(ScheduledBehavior)
+        .join(OptimizationRun)
+        .where(
+            (ScheduledBehavior.id == scheduled_behavior_id)
+            & (OptimizationRun.user_id == current_user.id)
+        )
+    )
+    scheduled = result.scalars().first()
+    if not scheduled:
+        raise HTTPException(status_code=404, detail="Scheduled behavior not found")
+
+    run = await db.get(OptimizationRun, scheduled.optimization_run_id)
+    if scheduled.released_at is not None:
+        return ApiResponse(
+            success=True,
+            message="Session already released",
+            data={"released_at": scheduled.released_at.isoformat()},
+        )
+
+    tz = user_zone(current_user)
+    now = clock.now_utc()
+    if now >= session_start(run.start_date, scheduled.time_period, tz):
+        raise HTTPException(
+            status_code=409,
+            detail="This session has already started; it counts as missed, not released.",
+        )
+
+    completed = await db.execute(
+        select(CompletionLog).where(
+            (CompletionLog.user_id == current_user.id)
+            & (CompletionLog.planned_session_id == scheduled.planned_session_id)
+        )
+    )
+    if completed.scalars().first():
+        raise HTTPException(
+            status_code=409, detail="This session is already completed"
+        )
+
+    scheduled.released_at = now
+    await db.commit()
+    await manager.broadcast_schedule_update(current_user.id)
+
+    return ApiResponse(
+        success=True,
+        message="Session released",
+        data={"released_at": now.isoformat()},
+    )
+
+
+@router.post("/commit", response_model=ApiResponse[dict])
+async def commit_baseline(
+    run_id: UUID = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Accept a plan as today's baseline (docs/METRIC.md §2).
+
+    Exactly one run per day can be the baseline. While the baseline is open it may
+    be re-committed; once it freezes this returns 409.
+    """
+    tz = user_zone(current_user)
+    today = local_today(tz)
+    runs = await day_runs(db, current_user.id, today)
+    if not runs:
+        raise HTTPException(status_code=404, detail="No plan to commit for today")
+
+    plan = await resolve_day_plan(db, current_user, today)
+    if plan.source == "committed":
+        return ApiResponse(
+            success=True,
+            message="Baseline already committed",
+            data={
+                "run_id": str(plan.run.id),
+                "baseline_revision": plan.run.baseline_revision,
+                "committed_at": plan.run.committed_at.isoformat()
+                if plan.run.committed_at
+                else None,
+            },
+        )
+    if plan.frozen:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The baseline is frozen (the first session started or the day "
+                "began); it can no longer be committed or changed."
+            ),
+        )
+
+    target = next((run for run in runs if run.id == run_id), None) if run_id else runs[-1]
+    if target is None:
+        raise HTTPException(status_code=404, detail="Plan not found for today")
+
+    now = clock.now_utc()
+    for other in runs:  # one baseline per day
+        other.baseline_revision = None
+    target.baseline_revision = target.plan_revision or 1
+    target.committed_at = now
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message="Baseline committed",
+        data={
+            "run_id": str(target.id),
+            "baseline_revision": target.baseline_revision,
+            "committed_at": now.isoformat(),
+        },
+    )
+
+
 @router.post("/reoptimize", response_model=ApiResponse[dict])
 async def partial_reoptimize(
     db: AsyncSession = Depends(get_db),
@@ -248,9 +382,21 @@ async def partial_reoptimize(
     from uuid import uuid4 as _uuid4
     from sqlalchemy import select as sa_select
     from app.models import Objective, Constraint
-    from app.optimization import LinearSolver, OptimizationProblem, BehaviorScheduleInput, ConstraintInput
+    from app.core.exceptions import SolverBusyError
+    from app.optimization import (
+        BehaviorScheduleInput,
+        CandidateSolver,
+        ConstraintInput,
+        OptimizationProblem,
+        normalise_weights,
+        record_weights,
+        run_in_solver_pool,
+    )
 
-    target_date = date.today()
+    # "Today" is the plan-local day, the same clock the metric uses: the server's
+    # date can already be tomorrow while the user's day is still running.
+    tz = user_zone(current_user)
+    target_date = local_today(tz)
 
     # 1. Find active run
     run_result = await db.execute(
@@ -265,11 +411,16 @@ async def partial_reoptimize(
     if not run:
         raise HTTPException(status_code=404, detail="No active schedule to re-optimize")
 
-    # 2. Determine current period
-    now = datetime.now(timezone.utc)
-    current_minutes = now.hour * 60 + now.minute
-    current_period = current_minutes // 15
-    day_offset = (target_date - run.start_date).days
+    # 2. Determine the current period in the user's plan-local clock, not the
+    # server's UTC clock (docs/METRIC.md §5), and honour the target date: a past
+    # day is entirely elapsed, a future day is entirely ahead.
+    now_local = clock.now_utc().astimezone(tz)
+    current_period = (now_local.hour * 60 + now_local.minute) // 15
+    day_offset = (target_date - local_today(tz)).days
+    if day_offset < 0:
+        current_period = PERIODS_PER_DAY
+    elif day_offset > 0:
+        current_period = 0
 
     # 3. Fetch all scheduled behaviors + completions
     sched_result = await db.execute(
@@ -291,28 +442,48 @@ async def partial_reoptimize(
     frozen_periods: dict[int, dict[int, int]] = {}
     behaviors_db = []
     behavior_index_map: dict[UUID, int] = {}
+    previous_starts: dict[int, int] = {}
 
-    for idx, (sb, behavior) in enumerate(all_items):
-        behavior_index_map[behavior.id] = idx
-        behaviors_db.append(behavior)
+    for sb, behavior in all_items:
+        # One problem entry per behaviour, not per scheduled session: a behaviour
+        # scheduled twice must not become two independent planners' behaviours,
+        # which would double its minutes and break its duration bounds.
+        if behavior.id not in behavior_index_map:
+            behavior_index_map[behavior.id] = len(behaviors_db)
+            behaviors_db.append(behavior)
+        idx = behavior_index_map[behavior.id]
         local_period = sb.time_period % PERIODS_PER_DAY
         blocks = sb.scheduled_duration // 15
         for b in range(blocks):
             t = local_period + b
-            if idx not in frozen_periods:
-                frozen_periods[idx] = {}
             if t < current_period:
-                frozen_periods[idx][t] = 1 if behavior.id in completed_ids else 0
+                frozen_periods.setdefault(idx, {})[t] = (
+                    1 if behavior.id in completed_ids else 0
+                )
+
+    for sb, behavior in all_items:
+        # The session each behaviour carries into the re-plan: its earliest
+        # session that has not fully elapsed. In-progress sessions count from
+        # now, so keeping them still reports no disruption.
+        idx = behavior_index_map[behavior.id]
+        local_start = sb.time_period % PERIODS_PER_DAY
+        if local_start + sb.scheduled_duration // 15 > current_period:
+            ref = max(local_start, current_period)
+            if idx not in previous_starts or ref < previous_starts[idx]:
+                previous_starts[idx] = ref
 
     # 5. Build problem
     obj_result = await db.execute(
         sa_select(Objective).where(Objective.user_id == current_user.id)
     )
     objectives_db = obj_result.scalars().all()
-    objectives = {
+    raw_weights = {
         o.type.value if hasattr(o.type, "value") else str(o.type): o.weight
         for o in objectives_db
     }
+    # One normalised distribution reaches the solver; the raw weights are kept
+    # for the plan's audit record (docs/FORMULATION.md).
+    objectives = normalise_weights(raw_weights)
 
     con_result = await db.execute(
         sa_select(Constraint).where(
@@ -344,6 +515,7 @@ async def partial_reoptimize(
                     s.value if hasattr(s, "value") else s
                     for s in b.preferred_time_slots
                 ],
+                protected=bool(getattr(b, "is_protected", False)),
             )
             for b in behaviors_db
         ],
@@ -356,31 +528,106 @@ async def partial_reoptimize(
 
     # 6. Solve
     new_run_id = _uuid4()
-    solver = LinearSolver(timeout_seconds=30)
-    solution = solver.solve_partial_day(problem, new_run_id, frozen_periods)
+    solver = CandidateSolver(timeout_seconds=30)
+    solution = await run_in_solver_pool(
+        solver.solve_partial_day,
+        problem,
+        new_run_id,
+        frozen_periods,
+        timeout_seconds=30,
+        previous_starts=previous_starts,
+    )
 
-    # 7. Persist
+    if solution.status == "protected_conflict":
+        conflict = (solution.diagnostics or {}).get("protected_conflict") or {}
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "protected_conflict",
+                "message": (
+                    "A protected habit cannot be placed in the rest of the day; "
+                    "release a session or shorten the habit."
+                ),
+                "unplaced": conflict.get("unplaced", []),
+                "conflicting": conflict.get("conflicting", []),
+                "minimalRelaxation": conflict.get("minimalRelaxation", []),
+            },
+        )
+
+    # 7. Persist as the next revision, keeping session identity (METRIC.md §4).
+    # Drafts before the baseline freezes stay revision 1 and retire nothing; a
+    # re-plan of a frozen baseline is a new revision that retires what it drops.
+    plan = await resolve_day_plan(db, current_user, target_date)
+    previous_run = plan.run
+    frozen = previous_run is not None and plan.frozen
+    revision = ((previous_run.plan_revision or 1) + 1) if frozen else 1
+
+    previous_sessions: list[ScheduledBehavior] = []
+    if previous_run is not None:
+        prev_result = await db.execute(
+            sa_select(ScheduledBehavior)
+            .where(ScheduledBehavior.optimization_run_id == previous_run.id)
+            .order_by(ScheduledBehavior.time_period)
+        )
+        previous_sessions = list(prev_result.scalars().all())
+
+    previous_by_behavior: dict[UUID, list[ScheduledBehavior]] = {}
+    for sb in previous_sessions:
+        previous_by_behavior.setdefault(sb.behavior_id, []).append(sb)
+
     new_run = OptimizationRun(
         id=new_run_id,
         user_id=current_user.id,
         status="completed" if solution.status == "optimal" else "feasible",
-        solver="linear",
+        # Variant (full/partial/forced) stays in results + diagnostics.
+        solver="candidate",
         start_date=target_date,
         end_date=target_date,
         time_periods=PERIODS_PER_DAY,
         total_objective_value=solution.total_objective_value,
         results=solution.to_dict(),
-        diagnostics=solution.diagnostics,
+        diagnostics={
+            **(solution.diagnostics or {}),
+            "objective_weights": record_weights(raw_weights),
+        },
+        plan_revision=revision,
     )
     db.add(new_run)
+
+    items_by_behavior: dict[UUID, list] = {}
     for item in solution.schedule_items:
-        db.add(ScheduledBehavior(
-            optimization_run_id=new_run_id,
-            behavior_id=item.behavior_id,
-            time_period=item.time_period,
-            scheduled_duration=item.scheduled_duration,
-            is_scheduled=item.is_scheduled,
-        ))
+        items_by_behavior.setdefault(item.behavior_id, []).append(item)
+
+    for behavior_id, items in items_by_behavior.items():
+        items.sort(key=lambda item: item.time_period)
+        previous = previous_by_behavior.get(behavior_id, [])
+        for index, item in enumerate(items):
+            # A surviving session keeps its id even when it moved.
+            planned_session_id = (
+                previous[index].planned_session_id if index < len(previous) else uuid4()
+            )
+            db.add(ScheduledBehavior(
+                optimization_run_id=new_run_id,
+                behavior_id=item.behavior_id,
+                time_period=item.time_period,
+                scheduled_duration=item.scheduled_duration,
+                is_scheduled=item.is_scheduled,
+                planned_session_id=planned_session_id,
+                plan_revision=revision,
+            ))
+        if frozen:
+            # Dropped sessions are retired, never deleted or renumbered.
+            for leftover in previous[len(items):]:
+                leftover.retired_revision = revision
+
+    if frozen:
+        # Behaviours missing from the new plan entirely (declined, not merely
+        # shortened) never enter the loop above; their sessions retire too.
+        for behavior_id, previous in previous_by_behavior.items():
+            if behavior_id not in items_by_behavior:
+                for leftover in previous:
+                    leftover.retired_revision = revision
+
     await db.commit()
 
     # 8. Broadcast + return
@@ -401,6 +648,7 @@ async def partial_reoptimize(
             "new_run_id": str(new_run_id),
             "status": solution.status,
             "schedule": schedule,
+            "disruption": (solution.diagnostics or {}).get("stability"),
         },
         message="Partial re-optimization completed",
     )

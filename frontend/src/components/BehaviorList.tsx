@@ -109,11 +109,6 @@ export function BehaviorList({
                 </span>
               </div>
 
-              <div className="flex items-center gap-1">
-                <Zap className="h-3.5 w-3.5" />
-                <span>Energy: {behavior.energyCost}/10</span>
-              </div>
-
               <span className="capitalize">
                 {behavior.frequency}
                 {behavior.frequency === "weekly" && behavior.frequencyCount

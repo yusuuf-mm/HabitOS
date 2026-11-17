@@ -13,7 +13,9 @@ from app.core.constants import get_time_slot_definitions, longest_contiguous_min
 from app.models import User, Behavior, CompletionLog, Objective, ObjectiveType
 from app.models.objective_impact import ObjectiveImpact
 from app.schemas.api import ApiResponse
+from app.optimization.weights import normalise_weights
 from app.schemas.behavior import (
+    ObjectiveWeightUpdate,
     BehaviorCreate,
     BehaviorUpdate,
     BehaviorResponse,
@@ -144,6 +146,7 @@ def map_behavior_to_response(behavior: Behavior, stats: tuple = None, objective_
         preferred_time_slots=[s.value if hasattr(s, "value") else str(s) for s in behavior.preferred_time_slots],
         objective_impacts=impacts,
         is_active=behavior.is_active,
+        is_protected=bool(getattr(behavior, "is_protected", False)),
         frequency=getattr(behavior, "frequency", "daily"),
         frequency_count=getattr(behavior, "frequency_count", None),
         created_at=behavior.created_at,
@@ -231,6 +234,7 @@ async def create_behavior(
         energy_cost=request.energyCost,
         preferred_time_slots=request.preferredTimeSlots or ["flexible"],
         is_active=request.isActive,
+        is_protected=request.isProtected,
     )
     db.add(behavior)
     await db.flush()
@@ -248,30 +252,91 @@ async def create_behavior(
     )
 
 
+async def _objective_payload(db: AsyncSession, user: User) -> List[dict]:
+    """Objective list payload, including the normalised weight the solver uses."""
+    result = await db.execute(select(Objective).where(Objective.user_id == user.id))
+    objectives = result.scalars().all()
+    normalised = normalise_weights(
+        {
+            obj.type.value if hasattr(obj.type, "value") else str(obj.type): (
+                obj.weight or 0.0
+            )
+            for obj in objectives
+        }
+    )
+    return [
+        {
+            "id": str(obj.id),
+            "userId": str(obj.user_id),
+            "name": obj.type.value if hasattr(obj.type, "value") else str(obj.type),
+            "description": obj.description,
+            "priority": int((obj.weight or 0.5) * 10),
+            "weight": round(
+                normalised.get(
+                    obj.type.value if hasattr(obj.type, "value") else str(obj.type),
+                    obj.weight or 0.0,
+                ),
+                6,
+            ),
+            "createdAt": obj.created_at.isoformat(),
+        }
+        for obj in objectives
+    ]
+
+
 @router.get("/objectives", response_model=ApiResponse[List[dict]])
 async def list_objectives(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """List user objectives."""
-    result = await db.execute(
-        select(Objective).where(Objective.user_id == current_user.id)
-    )
-    objectives = result.scalars().all()
-
+    data = await _objective_payload(db, current_user)
     return ApiResponse(
-        data=[
-            {
-                "id": str(obj.id),
-                "userId": str(obj.user_id),
-                "name": obj.type.value if hasattr(obj.type, "value") else str(obj.type),
-                "description": obj.description,
-                "priority": int((obj.weight or 0.5) * 10),
-                "createdAt": obj.created_at.isoformat(),
-            }
-            for obj in objectives
-        ],
+        data=data,
         message="Objectives retrieved successfully"
+    ).dict(exclude_none=True)
+
+
+@router.put("/objectives/{objective_id}", response_model=ApiResponse[List[dict]])
+async def update_objective_weight(
+    objective_id: UUID,
+    request: ObjectiveWeightUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Change one objective's weight and renormalise the set.
+
+    Weights are stored as a distribution that sums to 1, so raising one objective
+    lowers the others instead of inflating every plan's value. The plan records
+    the normalised weights it used (docs/FORMULATION.md).
+    """
+    result = await db.execute(
+        select(Objective).where(
+            (Objective.id == objective_id) & (Objective.user_id == current_user.id)
+        )
+    )
+    objective = result.scalars().first()
+    if not objective:
+        raise HTTPException(status_code=404, detail="Objective not found")
+
+    objective.weight = float(request.weight)
+    await db.flush()
+
+    objectives = (
+        await db.execute(select(Objective).where(Objective.user_id == current_user.id))
+    ).scalars().all()
+    weights = {str(obj.id): (obj.weight or 0.0) for obj in objectives}
+    normalised = normalise_weights(weights)
+    for obj in objectives:
+        obj.weight = round(normalised[str(obj.id)], 6)
+        obj.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    data = await _objective_payload(db, current_user)
+    return ApiResponse(
+        data=data,
+        message="Objective weight updated"
     ).dict(exclude_none=True)
 
 
@@ -356,6 +421,8 @@ async def update_behavior(
         behavior.preferred_time_slots = request.preferredTimeSlots
     if request.isActive is not None:
         behavior.is_active = request.isActive
+    if request.isProtected is not None:
+        behavior.is_protected = request.isProtected
 
     if request.objectiveImpacts is not None:
         await _sync_objective_impacts(
@@ -392,6 +459,30 @@ async def delete_behavior(
 
     behavior.is_active = False
     behavior.updated_at = datetime.now(timezone.utc)
+
+    # A session the user removes by deactivating its behaviour, before it starts,
+    # is a user release, not a planner failure (docs/METRIC.md §3.5). Sessions
+    # that already started are left exactly as they were.
+    from app.models.optimization import OptimizationRun, ScheduledBehavior
+    from app.services.metrics import local_today, session_start, user_zone
+
+    tz = user_zone(current_user)
+    now = datetime.now(timezone.utc)
+    today = local_today(tz)
+    upcoming = await db.execute(
+        select(ScheduledBehavior, OptimizationRun)
+        .join(OptimizationRun, ScheduledBehavior.optimization_run_id == OptimizationRun.id)
+        .where(
+            (ScheduledBehavior.behavior_id == behavior.id)
+            & (ScheduledBehavior.released_at.is_(None))
+            & (OptimizationRun.user_id == current_user.id)
+            & (OptimizationRun.end_date >= today)
+        )
+    )
+    for session, run in upcoming.all():
+        if now < session_start(run.start_date, session.time_period, tz):
+            session.released_at = now
+
     await db.commit()
 
     return ApiResponse(

@@ -1,3 +1,5 @@
+
+from tests_integration.support import plan_day, plan_now
 import pytest
 from uuid import UUID
 from httpx import AsyncClient
@@ -154,8 +156,8 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=plan_day(),
+        end_date=plan_day(),
         time_periods=96,
     )
     db_session.add(run)
@@ -175,7 +177,7 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
         behavior_id=behavior_uuid,
         optimization_run_id=run.id,
         actual_duration=15,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=plan_now(),
     )
     db_session.add(log)
     await db_session.commit()
@@ -208,7 +210,7 @@ async def test_soft_delete_behavior_preserves_history_and_completion_rate(
     assert after_rate == before_rate
 
     # Historical schedule still renders the deactivated behavior
-    today = date.today().isoformat()
+    today = plan_day().isoformat()
     schedule_resp = await auth_client.get(f"/api/v1/schedule?date={today}")
     assert schedule_resp.status_code == 200
     items = schedule_resp.json()["data"]["scheduledBehaviors"]

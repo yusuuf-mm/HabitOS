@@ -141,18 +141,20 @@ export function OptimizationPanel({
             </span>
           </div>
 
-          {/* Score */}
+          {/* Total objective value: the solver's raw objective
+              (weighted impact points x minutes), not a percentage. The real
+              normalised breakdown is the contributions list below. */}
           <div className="rounded-lg border border-border p-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Total Score</span>
+              <span className="text-sm text-muted-foreground">Total Objective Value</span>
               <span className="text-2xl font-semibold text-foreground">
-                {(displayRun.totalScore * 100).toFixed(1)}%
+                {displayRun.totalScore.toFixed(1)} pts·min
               </span>
             </div>
-            <Progress
-              value={displayRun.totalScore * 100}
-              className="mt-3 h-2"
-            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Weighted impact points × minutes — comparable between runs of
+              the same day, not a percentage.
+            </p>
           </div>
 
           {/* Objective Contributions */}
@@ -180,20 +182,15 @@ export function OptimizationPanel({
             </div>
           </div>
 
-          {/* Constraints */}
+          {/* Sessions scheduled. There are no real constraint counts to
+              report (both backend fields are deprecated and always 0), so
+              the panel shows the truthful number instead. */}
           <div className="flex items-center justify-between rounded-lg border border-border p-4">
             <span className="text-sm text-muted-foreground">
-              Constraints Satisfied
+              Sessions Scheduled
             </span>
-            <span
-              className={cn(
-                "font-medium",
-                displayRun.constraintsSatisfied === displayRun.constraintsTotal
-                  ? "text-success"
-                  : "text-warning"
-              )}
-            >
-              {displayRun.constraintsSatisfied} / {displayRun.constraintsTotal}
+            <span className="font-medium text-foreground">
+              {displayRun.scheduledBehaviors.length}
             </span>
           </div>
 

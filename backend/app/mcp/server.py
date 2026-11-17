@@ -123,7 +123,12 @@ async def trigger_emergency_reoptimization(target_date: str | None = None) -> st
         OptimizationRun, ScheduledBehavior, Behavior, CompletionLog,
         Objective, Constraint, User,
     )
-    from app.optimization import LinearSolver, OptimizationProblem, BehaviorScheduleInput, ConstraintInput
+    from app.optimization import (
+        CandidateSolver,
+        OptimizationProblem,
+        BehaviorScheduleInput,
+        ConstraintInput,
+    )
     from app.core.constants import PERIODS_PER_DAY
     from uuid import uuid4
     from sqlalchemy import select
@@ -244,7 +249,7 @@ async def trigger_emergency_reoptimization(target_date: str | None = None) -> st
         )
 
         new_run_id = uuid4()
-        solver = LinearSolver(timeout_seconds=30)
+        solver = CandidateSolver(timeout_seconds=30)
         solution = solver.solve_partial_day(problem, new_run_id, frozen_periods)
 
         # Persist the new run

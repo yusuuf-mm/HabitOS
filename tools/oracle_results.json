@@ -1,0 +1,31 @@
+{
+  "totals": {
+    "feasible": {
+      "total": 200,
+      "match": 200,
+      "violations": 0
+    },
+    "multi_session_gap": {
+      "total": 200,
+      "match": 200,
+      "violations": 0
+    },
+    "frozen": {
+      "total": 200,
+      "match": 200,
+      "violations": 0
+    },
+    "protected_conflict": {
+      "total": 200,
+      "match": 200,
+      "violations": 0
+    },
+    "over_capacity": {
+      "total": 200,
+      "match": 200,
+      "violations": 0
+    }
+  },
+  "disagreements": [],
+  "validate_schedule_clean": 100
+}

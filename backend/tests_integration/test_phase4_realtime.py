@@ -1,4 +1,6 @@
 """Phase 4 integration tests — WebSocket broadcast + partial-day re-optimization + telemetry."""
+
+from tests_integration.support import plan_day, plan_now
 import asyncio
 from datetime import date, datetime, timezone
 from unittest.mock import patch, AsyncMock
@@ -6,6 +8,17 @@ from uuid import UUID
 
 import pytest
 from httpx import AsyncClient
+
+def _plan_day():
+    """The plan-local day (UTC by default), the clock the schedule routes use.
+
+    `date.today()` is the server's local day, which can already be tomorrow while
+    the user's day is still running; runs dated with it would not be found by a
+    route that asks for today on the user's clock.
+    """
+    return plan_day()
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -40,8 +53,8 @@ async def test_broadcast_called_on_complete(auth_client: AsyncClient, db_session
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
         results={"objective_contributions": {"health": {"contribution": 15.0, "weight": 1.0}}},
         total_objective_value=15.0,
@@ -96,8 +109,8 @@ async def test_broadcast_called_on_incomplete(auth_client: AsyncClient, db_sessi
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
         results={"objective_contributions": {"mind": {"contribution": 24.0, "weight": 1.0}}},
         total_objective_value=24.0,
@@ -119,7 +132,7 @@ async def test_broadcast_called_on_incomplete(auth_client: AsyncClient, db_sessi
         behavior_id=behavior.id,
         optimization_run_id=run.id,
         actual_duration=30,
-        completed_at=datetime.now(timezone.utc),
+        completed_at=plan_now(),
     )
     db_session.add(log)
     await db_session.commit()
@@ -164,8 +177,8 @@ async def test_partial_reoptimize_returns_new_run(auth_client: AsyncClient, db_s
         user_id=user_id,
         status="completed",
         solver="linear",
-        start_date=date.today(),
-        end_date=date.today(),
+        start_date=_plan_day(),
+        end_date=_plan_day(),
         time_periods=96,
         results={"objective_contributions": {"health": {"contribution": 60.0, "weight": 1.0}}},
         total_objective_value=60.0,
@@ -176,14 +189,14 @@ async def test_partial_reoptimize_returns_new_run(auth_client: AsyncClient, db_s
     sb = ScheduledBehavior(
         optimization_run_id=run.id,
         behavior_id=behavior.id,
-        time_period=80,
+        time_period=30,  # 07:30, inside the behaviour's morning window
         scheduled_duration=30,
     )
     db_session.add(sb)
     await db_session.commit()
 
     resp = await auth_client.post("/api/v1/schedule/reoptimize")
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["data"]["new_run_id"] is not None
     assert body["data"]["status"] in ("optimal", "feasible")

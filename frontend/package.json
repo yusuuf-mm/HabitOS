@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:hero": "cd ../backend && uv run python ../tools/generate_hero_day.py"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",

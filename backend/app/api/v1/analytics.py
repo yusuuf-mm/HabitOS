@@ -6,8 +6,10 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends
 
+from app.core import clock
 from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.api.deps import get_db, get_current_active_user
+from app.services.metrics import compute_range, local_today, recent_days, user_zone
 from app.models import (
     User, 
     Behavior, 
@@ -18,9 +20,10 @@ from app.models import (
     OptimizationStatus
 )
 from app.schemas.api import ApiResponse
-from app.schemas.analytics import DashboardSummary, DashboardStats, AnalyticsData, BehaviorCompletion, ObjectiveProgress, CategoryDistribution, EnergyUsage, DashboardScheduledBehavior, DashboardBehavior
+from app.schemas.analytics import DashboardSummary, DashboardStats, AnalyticsData, BehaviorCompletion, ObjectiveProgress, CategoryDistribution, DashboardScheduledBehavior, DashboardBehavior
 from app.schemas.optimization import OptimizationSummary, ScheduledBehaviorResponse
 from app.api.v1.behaviors import map_behavior_to_response
+from app.optimization.weights import normalise_weights
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +44,9 @@ async def calculate_streak(db: AsyncSession, user_id) -> int:
     if not completion_dates:
         return 0
     
-    # Check if there's activity today or yesterday
-    today = date.today()
+    # Check if there's activity today or yesterday. The streak compares UTC
+    # completion dates, so it uses the same clock without a user zone.
+    today = local_today(timezone.utc)
     yesterday = today - timedelta(days=1)
     
     if completion_dates[0] not in (today, yesterday):
@@ -90,32 +94,12 @@ async def get_dashboard_summary(
     )
     total_runs = total_runs_result.scalar() or 0
     
-    # Completion rate (last 7 days)
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    scheduled_result = await db.execute(
-        select(func.count(ScheduledBehavior.id))
-        .join(OptimizationRun)
-        .where(
-            and_(
-                OptimizationRun.user_id == current_user.id,
-                OptimizationRun.created_at >= seven_days_ago
-            )
-        )
+    # Completion rate over the last 7 days, from the baseline-anchored metric
+    # (docs/METRIC.md). The old query counted every scheduled row of every run, so
+    # each re-plan added a whole plan to the denominator.
+    week_metric = await compute_range(
+        db, current_user, recent_days(7, user_zone(current_user))
     )
-    total_scheduled = scheduled_result.scalar() or 0
-    
-    completed_result = await db.execute(
-        select(func.count(CompletionLog.id))
-        .where(
-            and_(
-                CompletionLog.user_id == current_user.id,
-                CompletionLog.completed_at >= seven_days_ago
-            )
-        )
-    )
-    total_completed = completed_result.scalar() or 0
-    
-    completion_rate = (total_completed / total_scheduled) if total_scheduled > 0 else 0.0
     
     # Average satisfaction score
     avg_score_result = await db.execute(
@@ -149,7 +133,7 @@ async def get_dashboard_summary(
     recent_behaviors = [row[0] for row in recent_behaviors_result.all()]
     
     # Today's schedule
-    today = date.today()
+    today = local_today(user_zone(current_user))
     today_schedule_result = await db.execute(
         select(ScheduledBehavior, Behavior)
         .join(Behavior, ScheduledBehavior.behavior_id == Behavior.id)
@@ -186,7 +170,18 @@ async def get_dashboard_summary(
                 total_behaviors=total_behaviors,
                 active_behaviors=active_behaviors,
                 total_optimization_runs=total_runs,
-                completion_rate=round(completion_rate, 2),
+                completion_rate=(
+                    round(week_metric.completion_rate, 4)
+                    if week_metric.completion_rate is not None
+                    else None
+                ),
+                released=week_metric.released,
+                system_dropped=week_metric.system_dropped,
+                completion_rate_vs_feasible=(
+                    round(week_metric.completion_rate_vs_feasible, 4)
+                    if week_metric.completion_rate_vs_feasible is not None
+                    else None
+                ),
                 average_score=round(avg_score_normalized, 2),
                 streak_days=streak_days,
             ),
@@ -253,7 +248,7 @@ async def get_analytics(
         except ValueError:
             days = 7
     
-    start_date = date.today() - timedelta(days=days)
+    start_date = local_today(user_zone(current_user)) - timedelta(days=days)
     
     # Behavior completions by date
     completions_result = await db.execute(
@@ -325,30 +320,29 @@ async def get_analytics(
         for row in categories
     ]
     
-    # Objective progress (simplified - showing average impact scores)
+    # Objective weights: each objective's configured share of the
+    # optimisation objective (a 0-1 fraction normalised to sum to 1).
+    # ``progress`` carries this fraction as-is; the frontend renders it
+    # once as a percentage. It is the weight, not observed progress.
     objectives_result = await db.execute(
         select(Objective).where(Objective.user_id == current_user.id)
     )
     objectives = objectives_result.scalars().all()
-    
+    weights = normalise_weights(
+        {
+            (obj.type.value if hasattr(obj.type, "value") else str(obj.type)): obj.weight
+            for obj in objectives
+        }
+    )
+
     objective_progress = []
     for obj in objectives:
         obj_name = obj.type.value if hasattr(obj.type, 'value') else str(obj.type)
         objective_progress.append(ObjectiveProgress(
             objective_name=obj_name.capitalize(),
-            progress=round(obj.weight * 100, 1),
+            progress=weights[obj_name],
             trend="stable",
         ))
-    
-    # Energy usage (mock for now)
-    energy_usage = [
-        EnergyUsage(
-            date=start_date + timedelta(days=i),
-            energy_spent=0,
-            energy_budget=100,
-        )
-        for i in range(days)
-    ]
     
     return ApiResponse(
         success=True,
@@ -358,6 +352,5 @@ async def get_analytics(
             behavior_completions=behavior_completions,
             objective_progress=objective_progress,
             category_distribution=category_distribution,
-            energy_usage=energy_usage,
         )
     )

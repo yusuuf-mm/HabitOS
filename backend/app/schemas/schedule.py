@@ -16,9 +16,10 @@ class DailySchedule(BaseModel):
     date: date
     scheduledBehaviors: List[ScheduledBehaviorResponse] = Field(..., validation_alias="scheduled_behaviors", serialization_alias="scheduledBehaviors")
     totalDuration: int = Field(..., validation_alias="total_duration", serialization_alias="totalDuration")
-    totalEnergySpent: int = Field(..., validation_alias="total_energy_spent", serialization_alias="totalEnergySpent")
     objectiveScores: List[ObjectiveContributionSchema] = Field(..., validation_alias="objective_scores", serialization_alias="objectiveScores")
     createdAt: datetime = Field(..., validation_alias="created_at", serialization_alias="createdAt")
+    # Why the planner left behaviours out, straight from the run's diagnostics.
+    declines: List[dict] = Field(default_factory=list)
 
     class Config:
         """Pydantic config."""

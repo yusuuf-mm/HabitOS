@@ -148,3 +148,6 @@ ehthumbs.db
 # OS
 .DS_Store
 Thumbs.db
+
+# Local one-off scripts, logs and benchmark output
+scratch/

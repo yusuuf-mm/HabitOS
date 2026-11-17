@@ -1,0 +1,525 @@
+{
+  "generatedBy": "tools/generate_hero_day.py",
+  "solver": "candidate",
+  "value": 96.3,
+  "sessions": [
+    {
+      "name": "Morning walk",
+      "startPeriod": 24,
+      "start": "06:00",
+      "minutes": 45
+    },
+    {
+      "name": "Deep work",
+      "startPeriod": 28,
+      "start": "07:00",
+      "minutes": 120
+    },
+    {
+      "name": "Lunch",
+      "startPeriod": 48,
+      "start": "12:00",
+      "minutes": 45
+    },
+    {
+      "name": "Study",
+      "startPeriod": 62,
+      "start": "15:30",
+      "minutes": 60
+    },
+    {
+      "name": "Strength",
+      "startPeriod": 78,
+      "start": "19:30",
+      "minutes": 60
+    },
+    {
+      "name": "Read",
+      "startPeriod": 94,
+      "start": "23:30",
+      "minutes": 30
+    }
+  ],
+  "cells": [
+    {
+      "period": 0,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 1,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 2,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 3,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 4,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 5,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 6,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 7,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 8,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 9,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 10,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 11,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 12,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 13,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 14,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 15,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 16,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 17,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 18,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 19,
+      "kind": "night",
+      "label": null
+    },
+    {
+      "period": 20,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 21,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 22,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 23,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 24,
+      "kind": "session",
+      "label": "Morning walk"
+    },
+    {
+      "period": 25,
+      "kind": "session",
+      "label": "Morning walk"
+    },
+    {
+      "period": 26,
+      "kind": "session",
+      "label": "Morning walk"
+    },
+    {
+      "period": 27,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 28,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 29,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 30,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 31,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 32,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 33,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 34,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 35,
+      "kind": "session",
+      "label": "Deep work"
+    },
+    {
+      "period": 36,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 37,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 38,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 39,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 40,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 41,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 42,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 43,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 44,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 45,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 46,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 47,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 48,
+      "kind": "session",
+      "label": "Lunch"
+    },
+    {
+      "period": 49,
+      "kind": "session",
+      "label": "Lunch"
+    },
+    {
+      "period": 50,
+      "kind": "session",
+      "label": "Lunch"
+    },
+    {
+      "period": 51,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 52,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 53,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 54,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 55,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 56,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 57,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 58,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 59,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 60,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 61,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 62,
+      "kind": "session",
+      "label": "Study"
+    },
+    {
+      "period": 63,
+      "kind": "session",
+      "label": "Study"
+    },
+    {
+      "period": 64,
+      "kind": "session",
+      "label": "Study"
+    },
+    {
+      "period": 65,
+      "kind": "session",
+      "label": "Study"
+    },
+    {
+      "period": 66,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 67,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 68,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 69,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 70,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 71,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 72,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 73,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 74,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 75,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 76,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 77,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 78,
+      "kind": "session",
+      "label": "Strength"
+    },
+    {
+      "period": 79,
+      "kind": "session",
+      "label": "Strength"
+    },
+    {
+      "period": 80,
+      "kind": "session",
+      "label": "Strength"
+    },
+    {
+      "period": 81,
+      "kind": "session",
+      "label": "Strength"
+    },
+    {
+      "period": 82,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 83,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 84,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 85,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 86,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 87,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 88,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 89,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 90,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 91,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 92,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 93,
+      "kind": "free",
+      "label": null
+    },
+    {
+      "period": 94,
+      "kind": "session",
+      "label": "Read"
+    },
+    {
+      "period": 95,
+      "kind": "session",
+      "label": "Read"
+    }
+  ]
+}
