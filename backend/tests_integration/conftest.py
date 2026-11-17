@@ -30,6 +30,19 @@ TestingSessionLocal = async_sessionmaker(
 )
 
 
+# Teardown below is sync (asyncio.run), so session scope needs no event loop.
+@pytest.fixture(scope="session", autouse=True)
+def dispose_test_engine():
+    """Close the shared engine so the process can exit (KI-001).
+
+    The engine lives for the whole session on a StaticPool, and aiosqlite's
+    connection worker is a non-daemon thread: without dispose the interpreter
+    waits for it forever after the summary prints.
+    """
+    yield
+    asyncio.run(engine.dispose())
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def init_test_db():
     """Initialize test database."""
