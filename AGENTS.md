@@ -12,4 +12,11 @@ Useful Commands
     uv run python <PYTHON-FILE>
 
     regular git workflow:
-    regulary commit to git 
+    regulary commit to git
+
+## Code Map
+
+- backend/: application source
+- frontend/: application source
+- docs/: project documentation
+- .github/: project configuration 
