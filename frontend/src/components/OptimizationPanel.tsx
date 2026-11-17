@@ -183,7 +183,7 @@ export function OptimizationPanel({
           </div>
 
           {/* Sessions scheduled. There are no real constraint counts to
-              report (the backend set both fields to the session count), so
+              report (both backend fields are deprecated and always 0), so
               the panel shows the truthful number instead. */}
           <div className="flex items-center justify-between rounded-lg border border-border p-4">
             <span className="text-sm text-muted-foreground">

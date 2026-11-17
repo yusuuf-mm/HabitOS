@@ -44,7 +44,9 @@ export interface OptimizationRun {
   objectiveContributions: ObjectiveContribution[];
   totalScore: number;
   executionTimeMs: number;
+  /** @deprecated Always 0. No real constraint count exists; use declines and scheduledBehaviors.length. */
   constraintsSatisfied: number;
+  /** @deprecated Always 0. Kept so older clients keep parsing. */
   constraintsTotal: number;
   createdAt: string;
   completedAt?: string;

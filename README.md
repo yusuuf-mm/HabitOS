@@ -687,8 +687,8 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
     "solverStatus": "optimal",
     "totalScore": 42.5,
     "executionTimeMs": 324,
-    "constraintsSatisfied": 15,
-    "constraintsTotal": 15,
+    "constraintsSatisfied": 0, // deprecated, always 0
+    "constraintsTotal": 0, // deprecated, always 0
     "scheduledBehaviors": [...],
     "objectiveContributions": [...]
   },

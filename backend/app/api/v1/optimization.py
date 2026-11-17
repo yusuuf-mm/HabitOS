@@ -225,8 +225,8 @@ async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User
         objective_contributions=contributions,
         total_score=run.total_objective_value or 0.0,
         execution_time_ms=int((run.execution_time_seconds or 0) * 1000),
-        constraints_satisfied=len(scheduled_behaviors), # Simplified
-        constraints_total=len(scheduled_behaviors),    # Simplified
+        constraints_satisfied=0,  # Deprecated: no real constraint count exists.
+        constraints_total=0,  # Deprecated: kept for compatibility; always 0.
         created_at=run.created_at,
         completed_at=run.updated_at,
     )

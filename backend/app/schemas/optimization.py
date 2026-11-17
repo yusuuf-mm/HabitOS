@@ -75,8 +75,8 @@ class OptimizationRunResponse(BaseModel):
     objectiveContributions: List[ObjectiveContributionSchema] = Field(default_factory=list, validation_alias="objective_contributions", serialization_alias="objectiveContributions")
     totalScore: float = Field(0.0, validation_alias="total_score", serialization_alias="totalScore")
     executionTimeMs: int = Field(0, validation_alias="execution_time_ms", serialization_alias="executionTimeMs")
-    constraintsSatisfied: int = Field(0, validation_alias="constraints_satisfied", serialization_alias="constraintsSatisfied")
-    constraintsTotal: int = Field(0, validation_alias="constraints_total", serialization_alias="constraintsTotal")
+    constraintsSatisfied: int = Field(0, validation_alias="constraints_satisfied", serialization_alias="constraintsSatisfied", deprecated=True, description="Deprecated: always 0. No real constraint count exists; see the schedule's declines and session counts instead.")
+    constraintsTotal: int = Field(0, validation_alias="constraints_total", serialization_alias="constraintsTotal", deprecated=True, description="Deprecated: always 0. Kept so older clients keep parsing; see the schedule's declines and session counts instead.")
     createdAt: datetime = Field(..., validation_alias="created_at", serialization_alias="createdAt")
     completedAt: Optional[datetime] = Field(None, validation_alias="completed_at", serialization_alias="completedAt")
 

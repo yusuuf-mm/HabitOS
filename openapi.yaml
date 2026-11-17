@@ -345,8 +345,12 @@ components:
           type: integer
         constraintsSatisfied:
           type: integer
+          deprecated: true
+          description: "Deprecated: always 0. No real constraint count exists; see the schedule's declines and session counts instead."
         constraintsTotal:
           type: integer
+          deprecated: true
+          description: "Deprecated: always 0. Kept so older clients keep parsing."
         createdAt:
           type: string
           format: date-time
