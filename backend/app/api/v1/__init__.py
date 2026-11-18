@@ -5,6 +5,7 @@ from .optimization import router as optimization_router
 from .schedule import router as schedule_router
 from .analytics import router as analytics_router
 from .telemetry import router as telemetry_router
+from .items import router as items_router
 
 __all__ = [
     "auth_router",
@@ -13,4 +14,5 @@ __all__ = [
     "schedule_router",
     "analytics_router",
     "telemetry_router",
+    "items_router",
 ]

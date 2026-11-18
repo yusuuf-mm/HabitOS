@@ -7,8 +7,10 @@ from .constraint import Constraint, ConstraintType
 from .optimization import OptimizationRun, OptimizationStatus, SolverType, ScheduledBehavior
 from .tracking import CompletionLog
 from .telemetry import HabitTelemetry
+from .item import Item
 
 __all__ = [
+    "Item",
     "User",
     "Behavior",
     "BehaviorCategory",
