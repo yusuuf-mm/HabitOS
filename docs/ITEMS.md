@@ -153,6 +153,29 @@ Rules for the hand-over, so a bad parse cannot corrupt a day:
 - The draft is validated by the same schema as the form: a malformed draft is
   rejected before the user ever sees a save button.
 
+## Amendment (implemented in Step 1)
+
+Step 1 stores **commitments and deadlines only — no habit rows**. The `items`
+table keeps its kind `CHECK` to those two kinds; habits stay in `behaviors`
+with their objective impacts and completion history. Unifying later would mean
+migrating behaviors, impacts, completion foreign keys and solver inputs into
+items — deferred until a real need, because the single-table read path in this
+note assumed habits migrate, and they did not.
+
+- **Local-time storage.** A commitment stores `start_date` + `start_time` +
+  a `timezone` snapshot (plan-local wall clock, not a timestamptz). Periods
+  derive from the stored local time; the snapshot is for display.
+- **Private-flag semantics.** Private items are hidden from lists/summaries
+  but visible in the owner detail view — and they still block solver time.
+  Privacy is visibility, not solver behaviour.
+- **Overlap/sleep warnings.** Creation warns when the new commitment overlaps
+  another own commitment on its start date, and when it falls in the sleep
+  window (21:00–05:00).
+- **Preview endpoint.** `POST /items/preview` runs a baseline solve and a
+  blocked solve with the draft's periods added, reporting `displaced` (minutes
+  lost per behaviour) and `dropped` (behaviours with minutes reduced to zero)
+  without writing anything.
+
 ## What this note does not decide
 
 - Whether habits and commitments share one calendar colour or two.

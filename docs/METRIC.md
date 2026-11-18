@@ -173,9 +173,25 @@ not (100% + 10%) / 2 ≈ 55%. Days with no baseline contribute nothing (their
 - It does not reward partial completion of a session.
 - It is gameable by releasing. `released_ratio` is the mitigation, not a fix.
 
+## 10. Commitments and deadlines (items)
+
+Commitments are **context, not sessions**: they occupy time (blocked periods
+the solver plans around, `POST /items/preview` shows the cost) but they never
+enter the completion-rate denominator — neither as baseline sessions nor as
+completions. A commitment that displaces a habit mid-day shows up only through
+the normal mechanism: the habit session is released or dropped by the system
+and the rate keeps its two small numbers. Commitments are reported separately
+(as blocked periods in solver diagnostics and the preview's displaced list),
+never merged into `completed`/`baseline` counts.
+Deadlines follow the same rule: a deadline is a reminder, not a session, and
+is likewise excluded from the denominator. If a deadline ever gains a
+preparation block that the planner places, that prep session counts normally —
+but Step 1 stores no prep sessions, so deadlines stay fully out of the metric.
+
 ## Changelog
 
 | version | change |
 |---|---|
 | v1 | Session-level denominator frozen at the baseline moment; released sessions leave and are reported; system-dropped sessions stay and are reported separately; re-planning never shrinks the denominator. |
 | v1 (amended) | Baseline open until first session start or 05:00 local, whichever is later; drafts are not re-plans. Deactivating a behaviour before a session starts counts as released. Late completions (before local day end) count and are flagged. Timezone stored per user and used for boundaries. Multi-day rates are summed, not averaged. Known-tension section and `completion_rate_vs_feasible` added. |
+| v1 (items) | Commitments are context, not sessions: excluded from the completion-rate denominator, reported separately; deadlines likewise unless a prep block becomes a session. |
