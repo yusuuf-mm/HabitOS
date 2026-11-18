@@ -11,6 +11,7 @@ from sqlalchemy import select, func
 from app.api.deps import get_db, get_current_active_user
 from app.core import settings
 from app.core.constants import period_to_time, PERIODS_PER_DAY
+from app.services.items import blocked_periods_for_day
 from app.services.metrics import local_today, resolve_day_plan, user_zone
 from app.models import (
     User,
@@ -156,6 +157,11 @@ async def _load_problem(
         start_date=target_date,
         end_date=target_date,
         time_periods=PERIODS_PER_DAY,
+    )
+    # Commitments occupy fixed time on this date (docs/ITEMS.md): the solver
+    # plans around them, so every solve built here respects them.
+    problem.blocked_periods = frozenset(
+        await blocked_periods_for_day(db, user, target_date)
     )
     return problem, raw_weights
 

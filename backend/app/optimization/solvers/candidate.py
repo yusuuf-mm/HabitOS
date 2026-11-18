@@ -254,6 +254,16 @@ class CandidateSolver:
             candidates[b_idx] = generate_candidates(
                 windows[b_idx], remaining_min, remaining_max, earliest_free, periods
             )
+            if problem.blocked_periods:
+                # Commitments are occupied time, not choices: a candidate that
+                # touches one is never created (docs/ITEMS.md). With no blocked
+                # periods this branch is skipped and the model is unchanged.
+                blocked = problem.blocked_periods
+                candidates[b_idx] = [
+                    (start, length)
+                    for start, length in candidates[b_idx]
+                    if not any(p in blocked for p in range(start, start + length))
+                ]
 
         eligible = [
             b_idx
@@ -481,6 +491,8 @@ class CandidateSolver:
             diagnostics["stability"] = stability
         if forced:
             diagnostics["forced_behavior_ids"] = sorted(forced)
+        if problem.blocked_periods:
+            diagnostics["blocked_periods_count"] = len(problem.blocked_periods)
         if partial:
             diagnostics["frozen_periods_count"] = len(all_frozen)
             diagnostics["earliest_free_period"] = earliest_free

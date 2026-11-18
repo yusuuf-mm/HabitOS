@@ -108,6 +108,10 @@ class Settings(BaseSettings):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
 
+    # AI helper (Step 2+): optional so the app boots without it; the provider
+    # layer raises a clear error when the helper is used and this is unset.
+    NVIDIA_API_KEY: Optional[str] = Field(default=None, env="NVIDIA_API_KEY")
+
     def assert_safe_for_environment(self) -> None:
         """Refuse to boot in production with an insecure SECRET_KEY.
 

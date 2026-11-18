@@ -50,6 +50,9 @@ class OptimizationProblem:
     start_date: date
     end_date: date
     time_periods: int
+    # Periods occupied by commitments (docs/ITEMS.md): fixed blocks the solver
+    # must plan around, never decision variables. Empty = today's behaviour.
+    blocked_periods: frozenset = field(default_factory=frozenset)
 
     def __post_init__(self):
         """Validate problem specification."""
