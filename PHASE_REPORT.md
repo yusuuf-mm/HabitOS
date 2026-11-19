@@ -996,6 +996,11 @@ storage and solver groundwork, no LLM yet (Step 2/3 later).
   setting existed made pydantic reject the env file at startup — that is
   exactly why the setting landed in this step.)
 
+CI initially caught model/migration drift on the items timestamps
+(`Mapped[datetime]` implies NOT NULL; the migration said nullable). Fixed in
+the migration and the model; run `44426172912` on `b953370` is fully green
+(all five jobs).
+
 ## Needs a decision
 
 1. **Settled in Phase 1.5:** `scratch/` is ignored and the scripts live in
