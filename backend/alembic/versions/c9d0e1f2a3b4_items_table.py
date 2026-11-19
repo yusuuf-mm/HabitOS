@@ -66,8 +66,8 @@ def upgrade() -> None:
         sa.Column("prep_minutes", sa.Integer(), nullable=True),
         sa.Column("prep_lead_days", sa.Integer(), nullable=True),
         sa.Column("reminder_offsets", sa.JSON(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(_CK_ITEMS_KIND_FIELDS, name="ck_items_kind_fields"),
     )
     op.create_index("idx_items_user_id", "items", ["user_id"])
