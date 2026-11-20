@@ -952,6 +952,55 @@ backend:  126 passed, 1 skipped, 1 xpassed in 125.81s
 frontend: 5 files, 20 tests passed; tsc --noEmit clean; build ok (30.13s)
 ```
 
+## Step 1 — items backend (commitments and deadlines) (2026-11-18)
+
+Branch `feat/items-and-helper` from `main` (after PR #3 merged). The helper's
+storage and solver groundwork, no LLM yet (Step 2/3 later).
+
+- **Schema.** One `items` table, commitments and deadlines **only** (no habit
+  rows; the unification cost is recorded in `docs/ITEMS.md`). A `CHECK`
+  constraint (`ck_items_kind_fields`) keeps cross-kind states unrepresentable:
+  commitments carry local `start_date` + `start_time` + `timezone` snapshot
+  (not a timestamptz instant), duration, recurrence, and deadlines carry
+  `due_on` (plus optional prep/reminder data). `is_private` flag. Migration
+  `c9d0e1f2a3b4` is the new head; `tools/migration_cycle.sh` head expectations
+  updated to it.
+- **Solver (Wonder's own change).** `OptimizationProblem.blocked_periods`:
+  commitment-occupied periods are filtered at candidate generation, so they
+  are occupied time, never decision variables. Frozen/re-plan interplay and a
+  fully blocked behaviour (declines `no_fit`, never crashes) are covered.
+  **Zero commitments is byte-identical**: a deterministic six-case harness
+  (plain, midday, protected conflict, frozen partial, stability partial,
+  crowded) hashes to `e0c5192e…` before and after the change, and the
+  prototype oracle still runs 1,000/1,000 with 0 violations.
+- **API.** `/api/v1/items` create/list/detail/update/delete plus
+  `POST /preview` (baseline vs blocked solve → `displaced`/`dropped`, writes
+  nothing) and `POST /confirm` (the write path the assistant will use).
+  Ownership is one shared helper (`services/items.get_owned_item`); foreign
+  ids are 404, never 403. Private items stay out of the list, remain in the
+  owner's detail, and still block solver time. Overlap and sleep-window
+  (21:00–05:00) warnings ride on create/preview responses. Every solve route
+  (solve, re-plan, forced-include via the shared loader) now plans around
+  the day's commitments.
+- **Tests.** 11 new (4 solver unit, 7 route integration incl. cross-user
+  404s, preview-persists-nothing, recurrence expiry, timezone snapshot with
+  DST-free Asia/Tokyo). Full backend suite **137 passed, 1 skipped, 1
+  xpassed**. Migration: SQLite stamp→upgrade→downgrade→upgrade clean for the
+  new table (the full chain from base remains Postgres-only, a pre-existing
+  ARRAY column), and `tools/migration_cycle.sh` on local `postgres:15-alpine`:
+  **51/51 checks passed** with the items revision in the chain.
+- **Config.** `NVIDIA_API_KEY` documented (empty) in `.env.example`, present
+  in the gitignored `backend/.env`, and accepted as an **optional** setting:
+  the app boots without it; the Step 2 provider layer must fail clearly only
+  when the helper is used. (Adding the key to `backend/.env` before the
+  setting existed made pydantic reject the env file at startup — that is
+  exactly why the setting landed in this step.)
+
+CI initially caught model/migration drift on the items timestamps
+(`Mapped[datetime]` implies NOT NULL; the migration said nullable). Fixed in
+the migration and the model; run `44426172912` on `b953370` is fully green
+(all five jobs).
+
 ## Needs a decision
 
 1. **Settled in Phase 1.5:** `scratch/` is ignored and the scripts live in

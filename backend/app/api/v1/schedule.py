@@ -525,6 +525,13 @@ async def partial_reoptimize(
         end_date=target_date,
         time_periods=PERIODS_PER_DAY,
     )
+    # Commitments occupy fixed time today too; a re-plan must plan around them
+    # (they are how a commitment displaces habits mid-day, docs/ITEMS.md).
+    from app.services.items import blocked_periods_for_day
+
+    problem.blocked_periods = frozenset(
+        await blocked_periods_for_day(db, current_user, target_date)
+    )
 
     # 6. Solve
     new_run_id = _uuid4()
