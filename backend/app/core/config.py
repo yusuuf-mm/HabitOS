@@ -121,6 +121,9 @@ class Settings(BaseSettings):
     NVIDIA_MODEL_STRONG: str = Field(
         default="nvidia/nemotron-3-ultra-550b-a55b", env="NVIDIA_MODEL_STRONG"
     )
+    HELPER_DRAFT_RATE_LIMIT_PER_MINUTE: int = Field(
+        default=10, env="HELPER_DRAFT_RATE_LIMIT_PER_MINUTE"
+    )
 
     def assert_safe_for_environment(self) -> None:
         """Refuse to boot in production with an insecure SECRET_KEY.

@@ -1,15 +1,17 @@
 """AI helper routes: draft (preview-only) and confirm (idempotent write)."""
+import collections
 import dataclasses
 import json
 import logging
 import re
+import time
 from datetime import date
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,12 +26,12 @@ from app.core.exceptions import (
     SolverTimeoutError,
     UnboundedProblemError,
 )
-from app.models import Behavior, BehaviorCategory, TimeSlot, User
+from app.models import User
 from app.models.helper import HelperConfirmation
 from app.optimization import CandidateSolver, run_in_solver_pool
 from app.schemas.item import ItemCreate
 from app.services import llm
-from app.services.items import occurrence_on
+from app.services.items import list_owned_items, occurrence_on, warnings_for
 from app.services.metrics import local_today, user_zone
 
 logger = logging.getLogger(__name__)
@@ -72,42 +74,28 @@ HABIT_SLOTS = {
     "flexible",
 }
 
-HABIT_NOTE = (
-    "Habits are flexible: they are stored as behaviours, not items."
+HABIT_UNSUPPORTED_REASON = (
+    "Habits are flexible and are created in the habit form for now; "
+    "this draft can't add them."
 )
-HABIT_CATEGORY_NOTE = "Habits are stored with category 'health' by default."
+
+# Per-user monotonic timestamps of recent draft attempts (rate limiting).
+_DRAFT_ATTEMPTS: dict[str, collections.deque] = {}
 
 
-class HabitDraft(BaseModel):
-    """A flexible habit draft; stored as a Behaviour on confirm, never an item."""
-
-    model_config = {"populate_by_name": True, "extra": "ignore"}
-
-    kind: Literal["habit"]
-    title: str = Field(..., min_length=1, max_length=255)
-    preferredTimeSlots: list[str] = Field(default_factory=lambda: ["flexible"])
-    durationMin: int = Field(..., ge=5, le=480)
-    durationMax: int = Field(..., ge=5, le=480)
-    isPrivate: bool = Field(default=False)
-
-    @field_validator("preferredTimeSlots")
-    @classmethod
-    def validate_slots(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("preferredTimeSlots must not be empty")
-        unknown = [s for s in v if s not in HABIT_SLOTS]
-        if unknown:
-            raise ValueError(
-                "preferredTimeSlots must be a subset of "
-                "early_morning|morning|midday|afternoon|evening|night|flexible"
-            )
-        return v
-
-    @model_validator(mode="after")
-    def validate_range(self) -> "HabitDraft":
-        if self.durationMax < self.durationMin:
-            raise ValueError("durationMax must be >= durationMin")
-        return self
+def _enforce_draft_rate_limit(user_id: str) -> None:
+    now = time.monotonic()
+    attempts = _DRAFT_ATTEMPTS.setdefault(user_id, collections.deque())
+    while attempts and attempts[0] <= now - 60:
+        attempts.popleft()
+    limit = settings.HELPER_DRAFT_RATE_LIMIT_PER_MINUTE
+    if len(attempts) >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many draft requests; try again in a moment.",
+            headers={"Retry-After": "60"},
+        )
+    attempts.append(now)
 
 
 class DraftRequest(BaseModel):
@@ -176,14 +164,17 @@ def _parse_model_output(text: str) -> tuple[Optional[list], list, Optional[str]]
 
 def _validate_draft_items(
     raw_items: list,
-) -> tuple[list[dict], list[dict], bool]:
-    """Split raw draft items into valid dicts and rejections.
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Split raw draft items into valid dicts, rejections, and unsupported.
 
-    Returns (valid_items, rejected, has_habit).
+    Habits are UNSUPPORTED (product decision): they always land in
+    ``unsupported`` and never validate as items.
+
+    Returns (valid_items, rejected, unsupported).
     """
     valid: list[dict] = []
     rejected: list[dict] = []
-    has_habit = False
+    unsupported: list[dict] = []
     for original in raw_items:
         if not isinstance(original, dict):
             rejected.append(
@@ -191,6 +182,11 @@ def _validate_draft_items(
             )
             continue
         kind = original.get("kind")
+        if kind == "habit":
+            unsupported.append(
+                {"item": original, "reason": HABIT_UNSUPPORTED_REASON}
+            )
+            continue
         if kind in ("commitment", "deadline"):
             if kind == "commitment" and original.get("durationMinutes") is None:
                 rejected.append(
@@ -211,14 +207,6 @@ def _validate_draft_items(
                 rejected.append({"item": original, "reason": str(exc)})
                 continue
             valid.append(payload.model_dump())
-        elif kind == "habit":
-            try:
-                draft = HabitDraft(**original)
-            except Exception as exc:
-                rejected.append({"item": original, "reason": str(exc)})
-                continue
-            has_habit = True
-            valid.append(draft.model_dump())
         else:
             rejected.append(
                 {
@@ -226,7 +214,7 @@ def _validate_draft_items(
                     "reason": f"unknown kind: {kind!r}",
                 }
             )
-    return valid, rejected, has_habit
+    return valid, rejected, unsupported
 
 
 def _solution_minutes(solution) -> dict:
@@ -324,6 +312,18 @@ async def _preview_for_dates(
     return list(displaced_best.values()), list(dropped_best.values())
 
 
+@router.get("/status")
+async def helper_status(
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Whether the AI helper is configured and which models it would use."""
+    return {
+        "configured": bool(settings.NVIDIA_API_KEY),
+        "fastModel": settings.NVIDIA_MODEL_FAST,
+        "strongModel": settings.NVIDIA_MODEL_STRONG,
+    }
+
+
 @router.post("/draft")
 async def draft_items(
     body: DraftRequest,
@@ -331,29 +331,56 @@ async def draft_items(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Parse free text into a draft; preview only, nothing is written."""
+    if len(body.transcript) > 4000:
+        raise HTTPException(
+            status_code=422,
+            detail="Transcript is too long (max 4,000 characters).",
+        )
+    _enforce_draft_rate_limit(str(current_user.id))
     tz = user_zone(current_user)
     today = local_today(tz)
     user_message = (
         f"Today is {today.isoformat()} ({today.strftime('%A')}). "
         f"Transcript:\n{body.transcript}"
     )
-    try:
-        result = await llm.chat(
-            [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            # Reasoning models spend tokens thinking before emitting JSON;
-            # the provider default (1024) starves them into empty replies.
-            max_tokens=3000,
-            temperature=0.0,
-        )
-    except llm.LLMUnavailableError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    text = (result.get("text") or "") if isinstance(result, dict) else ""
-    try:
-        raw_items, model_assumptions, clarify = _parse_model_output(text)
-    except ValueError:
+    models = [
+        settings.NVIDIA_MODEL_FAST,
+        settings.NVIDIA_MODEL_FAST,
+        settings.NVIDIA_MODEL_STRONG,
+    ]
+    last_unavailable: Optional[str] = None
+    chats_succeeded = False
+    raw_items: Optional[list] = None
+    model_assumptions: list = []
+    clarify: Optional[str] = None
+    for model in models:
+        try:
+            result = await llm.chat(
+                [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message},
+                ],
+                model=model,
+                # Reasoning models spend tokens thinking before emitting
+                # JSON; the provider default (1024) starves them.
+                max_tokens=3000,
+                temperature=0.0,
+            )
+        except llm.LLMUnavailableError as exc:
+            last_unavailable = str(exc)
+            continue
+        chats_succeeded = True
+        text = (result.get("text") or "") if isinstance(result, dict) else ""
+        try:
+            raw_items, model_assumptions, clarify = _parse_model_output(text)
+        except ValueError:
+            continue
+        break
+    if raw_items is None and clarify is None:
+        if not chats_succeeded:
+            raise HTTPException(
+                status_code=503, detail=last_unavailable or "LLM unavailable"
+            )
         raise HTTPException(
             status_code=422,
             detail={
@@ -371,27 +398,37 @@ async def draft_items(
             "items": [],
             "assumptions": [str(a) for a in model_assumptions],
             "rejected": [],
+            "unsupported": [],
+            "warnings": [],
             "displaced": [],
             "dropped": [],
             "clarify": clarify,
         }
-    valid, rejected, has_habit = _validate_draft_items(raw_items or [])
+    valid, rejected, unsupported = _validate_draft_items(raw_items or [])
     assumptions = [str(a) for a in model_assumptions]
-    if has_habit:
-        assumptions.append(HABIT_NOTE)
-    commitments = []
+    commitments: list[ItemCreate] = []
     for item in valid:
         if item.get("kind") == "commitment":
             try:
                 commitments.append(ItemCreate(**item))
             except Exception:
                 continue
+    own_items = await list_owned_items(db, current_user.id)
+    seen: set[str] = set()
+    warnings: list[str] = []
+    for payload in commitments:
+        for warning in warnings_for(payload, own_items, payload.startDate):
+            if warning not in seen:
+                seen.add(warning)
+                warnings.append(warning)
     displaced, dropped = await _preview_for_dates(db, current_user, commitments)
     return {
         "draftId": draft_id,
         "items": valid,
         "assumptions": assumptions,
         "rejected": rejected,
+        "unsupported": unsupported,
+        "warnings": warnings,
         "displaced": displaced,
         "dropped": dropped,
         "clarify": None,
@@ -405,6 +442,11 @@ async def confirm_items(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Persist a draft's items idempotently; the transcript is stored ONLY here."""
+    if len(body.transcript) > 4000:
+        raise HTTPException(
+            status_code=422,
+            detail="Transcript is too long (max 4,000 characters).",
+        )
     existing_result = await db.execute(
         select(HelperConfirmation).where(
             (HelperConfirmation.user_id == current_user.id)
@@ -423,7 +465,8 @@ async def confirm_items(
             },
         )
 
-    valid, rejected, has_habit = _validate_draft_items(body.items)
+    valid, rejected, unsupported = _validate_draft_items(body.items)
+    rejected = list(rejected) + list(unsupported)
     if rejected:
         raise HTTPException(
             status_code=422,
@@ -436,31 +479,10 @@ async def confirm_items(
 
     item_ids: list[str] = []
     behavior_ids: list[str] = []
-    habits: list[HabitDraft] = []
     for item in valid:
-        if item.get("kind") == "habit":
-            habits.append(HabitDraft(**item))
-        else:
-            created = await _create_item(db, current_user, ItemCreate(**item))
-            item_ids.append(str(created.id))
-            # _create_item commits per item; keep the session usable below.
-    for habit in habits:
-        behavior = Behavior(
-            user_id=current_user.id,
-            name=habit.title,
-            category=BehaviorCategory.HEALTH,
-            min_duration=habit.durationMin,
-            typical_duration=habit.durationMin,
-            max_duration=habit.durationMax,
-            energy_cost=5,
-            preferred_time_slots=[
-                TimeSlot(slot) for slot in habit.preferredTimeSlots
-            ],
-            is_active=True,
-        )
-        db.add(behavior)
-        await db.flush()
-        behavior_ids.append(str(behavior.id))
+        created = await _create_item(db, current_user, ItemCreate(**item))
+        item_ids.append(str(created.id))
+        # _create_item commits per item; keep the session usable below.
 
     confirmation = HelperConfirmation(
         user_id=current_user.id,
@@ -473,14 +495,10 @@ async def confirm_items(
     await db.commit()
     await db.refresh(confirmation)
 
-    assumptions = []
-    if has_habit:
-        assumptions.append(HABIT_NOTE)
-        assumptions.append(HABIT_CATEGORY_NOTE)
     return {
         "confirmationId": str(confirmation.id),
         "itemIds": item_ids,
         "behaviorIds": behavior_ids,
         "idempotent": False,
-        "assumptions": assumptions,
+        "assumptions": [],
     }

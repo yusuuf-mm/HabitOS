@@ -11,6 +11,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1 import helper as helper_module
+from app.core.config import settings
 from app.models.helper import HelperConfirmation
 from app.models.user import User
 from app.services import llm
@@ -18,6 +20,13 @@ from tests_integration.support import plan_day
 
 
 DAY = (plan_day() + timedelta(days=1)).isoformat()
+
+
+@pytest.fixture(autouse=True)
+def _clear_draft_rate_limit():
+    helper_module._DRAFT_ATTEMPTS.clear()
+    yield
+    helper_module._DRAFT_ATTEMPTS.clear()
 
 
 def _fake_chat(text: str):
@@ -62,7 +71,7 @@ async def _user_by_email(db_session: AsyncSession, email: str) -> User:
     return result.scalars().first()
 
 
-async def test_draft_returns_three_items_and_writes_nothing(
+async def test_draft_returns_two_items_plus_unsupported_habit(
     auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setattr(llm, "chat", _fake_chat(_three_item_text()))
@@ -72,14 +81,16 @@ async def test_draft_returns_three_items_and_writes_nothing(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["clarify"] is None
-    assert len(body["items"]) == 3, body
+    assert len(body["items"]) == 2, body
     assert {item["kind"] for item in body["items"]} == {
         "deadline",
         "commitment",
-        "habit",
     }
     assert "displaced" in body and "dropped" in body
     assert body["rejected"] == []
+    assert len(body["unsupported"]) == 1, body
+    assert body["unsupported"][0]["item"]["kind"] == "habit"
+    assert "warnings" in body
     assert body["draftId"]
 
     listed = await auth_client.get("/api/v1/items")
@@ -261,9 +272,33 @@ async def test_confirm_private_commitment_hidden_from_list(
     assert detail.status_code == 200, detail.text
 
 
-async def test_confirm_habit_creates_behavior(
-    auth_client: AsyncClient,
+async def test_draft_habit_is_unsupported_and_confirm_is_422(
+    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ):
+    habit_text = json.dumps(
+        {
+            "items": [
+                {
+                    "kind": "habit",
+                    "title": "Read",
+                    "preferredTimeSlots": ["evening"],
+                    "durationMin": 30,
+                    "durationMax": 60,
+                }
+            ],
+            "assumptions": [],
+        }
+    )
+    monkeypatch.setattr(llm, "chat", _fake_chat(habit_text))
+    drafted = await auth_client.post(
+        "/api/v1/helper/draft", json={"transcript": "read every evening"}
+    )
+    assert drafted.status_code == 200, drafted.text
+    drafted_body = drafted.json()
+    assert drafted_body["items"] == []
+    assert len(drafted_body["unsupported"]) == 1
+    assert drafted_body["unsupported"][0]["item"]["kind"] == "habit"
+
     payload = {
         "draftId": str(uuid4()),
         "transcript": "read every evening",
@@ -278,15 +313,12 @@ async def test_confirm_habit_creates_behavior(
         ],
     }
     created = await auth_client.post("/api/v1/helper/confirm", json=payload)
-    assert created.status_code == 201, created.text
-    body = created.json()
-    assert len(body["behaviorIds"]) == 1
-    assert body["itemIds"] == []
+    assert created.status_code == 422, created.text
+    assert "confirm_invalid" in created.text
 
     behaviors = await auth_client.get("/api/v1/behaviors")
     assert behaviors.status_code == 200, behaviors.text
-    listed_ids = [b["id"] for b in behaviors.json()["data"]["data"]]
-    assert body["behaviorIds"][0] in listed_ids
+    assert behaviors.json()["data"]["total"] == 0
 
 
 async def test_draft_without_key_is_503(
@@ -303,3 +335,200 @@ async def test_draft_without_key_is_503(
     )
     assert response.status_code == 503, response.text
     assert "NVIDIA_API_KEY" in response.text
+
+
+async def test_draft_transcript_too_long_is_422(
+    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(llm, "chat", _fake_chat(_three_item_text()))
+    response = await auth_client.post(
+        "/api/v1/helper/draft", json={"transcript": "x" * 4001}
+    )
+    assert response.status_code == 422, response.text
+    # Either the manual length check or pydantic's max_length fires; both
+    # are 422 and both name the 4,000-character limit.
+    assert "4000" in response.text or "4,000" in response.text
+
+
+async def test_confirm_transcript_too_long_is_422(auth_client: AsyncClient):
+    payload = {
+        "draftId": str(uuid4()),
+        "transcript": "x" * 4001,
+        "items": [],
+    }
+    response = await auth_client.post("/api/v1/helper/confirm", json=payload)
+    assert response.status_code == 422, response.text
+    assert "4000" in response.text or "4,000" in response.text
+
+
+async def test_draft_rate_limit_returns_429(
+    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(
+        settings, "HELPER_DRAFT_RATE_LIMIT_PER_MINUTE", 2
+    )
+    monkeypatch.setattr(llm, "chat", _fake_chat(_three_item_text()))
+    for _ in range(2):
+        response = await auth_client.post(
+            "/api/v1/helper/draft", json={"transcript": "add gym"}
+        )
+        assert response.status_code == 200, response.text
+    limited = await auth_client.post(
+        "/api/v1/helper/draft", json={"transcript": "add gym"}
+    )
+    assert limited.status_code == 429, limited.text
+    assert limited.headers.get("Retry-After") == "60"
+
+
+async def test_draft_fallback_retries_then_strong_model(
+    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    seen_models: list = []
+    calls = {"n": 0}
+    valid_text = json.dumps(
+        {
+            "items": [
+                {
+                    "kind": "commitment",
+                    "title": "Gym",
+                    "startDate": DAY,
+                    "startTime": "08:00",
+                    "durationMinutes": 60,
+                    "recurrence": "once",
+                }
+            ],
+            "assumptions": [],
+        }
+    )
+
+    async def _flaky_chat(messages, **kwargs):
+        seen_models.append(kwargs.get("model"))
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            return {"text": "garbage {{{", "model": "fake", "latency_seconds": 0.01}
+        return {"text": valid_text, "model": "fake", "latency_seconds": 0.01}
+
+    monkeypatch.setattr(llm, "chat", _flaky_chat)
+    response = await auth_client.post(
+        "/api/v1/helper/draft", json={"transcript": "add gym"}
+    )
+    assert response.status_code == 200, response.text
+    assert seen_models == [
+        settings.NVIDIA_MODEL_FAST,
+        settings.NVIDIA_MODEL_FAST,
+        settings.NVIDIA_MODEL_STRONG,
+    ], seen_models
+    assert len(response.json()["items"]) == 1
+
+
+async def test_draft_warnings_overlap_and_sleep_window(
+    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    created = await auth_client.post(
+        "/api/v1/items",
+        json={
+            "kind": "commitment",
+            "title": "Morning block",
+            "startDate": DAY,
+            "startTime": "07:00",
+            "durationMinutes": 300,
+            "recurrence": "once",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    draft_text = json.dumps(
+        {
+            "items": [
+                {
+                    "kind": "commitment",
+                    "title": "Gym",
+                    "startDate": DAY,
+                    "startTime": "08:00",
+                    "durationMinutes": 60,
+                    "recurrence": "once",
+                },
+                {
+                    "kind": "commitment",
+                    "title": "Late work",
+                    "startDate": DAY,
+                    "startTime": "22:00",
+                    "durationMinutes": 60,
+                    "recurrence": "once",
+                },
+            ],
+            "assumptions": [],
+        }
+    )
+    monkeypatch.setattr(llm, "chat", _fake_chat(draft_text))
+    response = await auth_client.post(
+        "/api/v1/helper/draft", json={"transcript": "gym and late work"}
+    )
+    assert response.status_code == 200, response.text
+    warnings = response.json()["warnings"]
+    assert any("overlaps" in w for w in warnings), warnings
+    assert any("sleep window" in w for w in warnings), warnings
+
+
+async def test_helper_status_configured_flag(
+    auth_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "NVIDIA_API_KEY", "test-key-123")
+    response = await auth_client.get("/api/v1/helper/status")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["configured"] is True
+    assert body["fastModel"] == settings.NVIDIA_MODEL_FAST
+    assert body["strongModel"] == settings.NVIDIA_MODEL_STRONG
+
+    monkeypatch.setattr(settings, "NVIDIA_API_KEY", None)
+    missing = await auth_client.get("/api/v1/helper/status")
+    assert missing.status_code == 200, missing.text
+    assert missing.json()["configured"] is False
+
+
+async def test_items_day_returns_commitments_deadlines_and_private(
+    auth_client: AsyncClient,
+):
+    commitment = {
+        "kind": "commitment",
+        "title": "Gym session",
+        "startDate": DAY,
+        "startTime": "08:00",
+        "durationMinutes": 60,
+        "recurrence": "once",
+    }
+    deadline = {"kind": "deadline", "title": "File report", "dueOn": DAY}
+    private = {
+        "kind": "commitment",
+        "title": "Secret",
+        "isPrivate": True,
+        "startDate": DAY,
+        "startTime": "09:00",
+        "durationMinutes": 60,
+        "recurrence": "once",
+    }
+    for payload in (commitment, deadline, private):
+        created = await auth_client.post(
+            "/api/v1/helper/confirm",
+            json={
+                "draftId": str(uuid4()),
+                "transcript": "plan",
+                "items": [payload],
+            },
+        )
+        assert created.status_code == 201, created.text
+
+    response = await auth_client.get(f"/api/v1/items/day?date={DAY}")
+    assert response.status_code == 200, response.text
+    entries = response.json()
+    assert len(entries) == 3, entries
+    by_title = {entry["title"]: entry for entry in entries}
+    assert by_title["Gym session"]["startTime"] == "08:00"
+    assert by_title["Gym session"]["endTime"] == "09:00"
+    assert by_title["Secret"]["isPrivate"] is True
+    assert by_title["Secret"]["startTime"] == "09:00"
+    assert by_title["File report"]["kind"] == "deadline"
+    assert by_title["File report"]["dueOn"] == DAY
+    kinds = [entry["kind"] for entry in entries]
+    assert kinds[-1] == "deadline"
