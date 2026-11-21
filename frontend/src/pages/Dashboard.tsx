@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatsCards } from "@/components/StatsCards";
+import { HelperPanel } from "@/components/HelperPanel";
 import { PageLoader } from "@/components/Loader";
 import { apiClient } from "@/services/apiClient";
 import type { DashboardSummary } from "@/types";
@@ -19,18 +20,19 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await apiClient.analytics.getDashboardSummary();
-        setSummary(response.data);
-      } catch (error) {
-        console.error("Failed to fetch dashboard summary:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const response = await apiClient.analytics.getDashboardSummary();
+      setSummary(response.data);
+    } catch (error) {
+      console.error("Failed to fetch dashboard summary:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchData();
   }, []);
 
@@ -102,6 +104,11 @@ export default function Dashboard() {
 
       {/* Stats Cards */}
       <StatsCards stats={stats} />
+
+      <HelperPanel
+        date={new Date().toISOString().split("T")[0]}
+        onConfirmed={fetchData}
+      />
 
       {/* Content Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
