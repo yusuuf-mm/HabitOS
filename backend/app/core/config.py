@@ -111,6 +111,19 @@ class Settings(BaseSettings):
     # AI helper (Step 2+): optional so the app boots without it; the provider
     # layer raises a clear error when the helper is used and this is unset.
     NVIDIA_API_KEY: Optional[str] = Field(default=None, env="NVIDIA_API_KEY")
+    NVIDIA_BASE_URL: str = Field(
+        default="https://integrate.api.nvidia.com/v1", env="NVIDIA_BASE_URL"
+    )
+    NVIDIA_MODEL_FAST: str = Field(
+        default="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        env="NVIDIA_MODEL_FAST",
+    )
+    NVIDIA_MODEL_STRONG: str = Field(
+        default="nvidia/nemotron-3-ultra-550b-a55b", env="NVIDIA_MODEL_STRONG"
+    )
+    HELPER_DRAFT_RATE_LIMIT_PER_MINUTE: int = Field(
+        default=10, env="HELPER_DRAFT_RATE_LIMIT_PER_MINUTE"
+    )
 
     def assert_safe_for_environment(self) -> None:
         """Refuse to boot in production with an insecure SECRET_KEY.

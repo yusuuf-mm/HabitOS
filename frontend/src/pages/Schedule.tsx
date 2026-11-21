@@ -3,14 +3,17 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScheduleView } from "@/components/ScheduleView";
 import { PlanTools } from "@/components/PlanTools";
+import { HelperPanel } from "@/components/HelperPanel";
 import { PageLoader } from "@/components/Loader";
 import { apiClient } from "@/services/apiClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DailySchedule } from "@/types";
+import type { HelperDayItem } from "@/types/helper";
 
 export default function Schedule() {
   const { toast } = useToast();
   const [schedule, setSchedule] = useState<DailySchedule | null>(null);
+  const [dayItems, setDayItems] = useState<HelperDayItem[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
 
@@ -18,12 +21,20 @@ export default function Schedule() {
     fetchSchedule();
   }, [currentDate]);
 
+  const currentDateStr = currentDate.toISOString().split("T")[0];
+
   const fetchSchedule = async () => {
     setIsLoading(true);
     try {
       const dateStr = currentDate.toISOString().split("T")[0];
       const response = await apiClient.schedule.getSchedule(dateStr);
       setSchedule(response.data);
+      try {
+        const items = await apiClient.items.getDay(dateStr);
+        setDayItems(items);
+      } catch (error) {
+        console.error("Failed to fetch day items:", error);
+      }
     } catch (error) {
       console.error("Failed to fetch schedule:", error);
     } finally {
@@ -140,6 +151,8 @@ export default function Schedule() {
         <div className="w-20" /> {/* Spacer for alignment */}
       </div>
 
+      <HelperPanel date={currentDateStr} onConfirmed={fetchSchedule} />
+
       {/* Schedule View */}
       {isLoading ? (
         <PageLoader text="Loading schedule..." />
@@ -154,6 +167,7 @@ export default function Schedule() {
             schedule={schedule}
             onMarkComplete={handleMarkComplete}
             onMarkIncomplete={handleMarkIncomplete}
+            fixedItems={dayItems}
           />
         </div>
       ) : (
