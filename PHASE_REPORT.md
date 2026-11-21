@@ -1063,6 +1063,45 @@ audio path), and the transcript is stored only on confirm.
   Full suite **150 passed**; Postgres migration cycle **51/51** with the new
   head; `alembic check` clean; SQLite cycle clean for the new table.
 
+## Step 5 — helper UI, end to end (2026-11-21)
+
+Branch `feat/helper`. The supervised helper now works from the day view.
+
+- **Hardening.** Transcript cap 4,000 chars with a clear 422; per-user draft
+  rate limit (10/min default, configurable); draft now retries the primary
+  once on unparseable output, then falls back to the strong model (tested
+  with a garbage-speaking fake primary: calls were [fast, fast, strong]).
+  `GET /helper/status` reports configured-or-not without leaking the key.
+- **Habits decision (safe option):** the helper does **not** create
+  behaviours. A habit in a draft comes back as `unsupported` — "created in
+  the habit form for now" — because the defaults it would need (health
+  category, no objective impacts, dormant energy cost) would be silent
+  guesses attached to the user's plan. Confirming a habit item is a 422.
+- **UI.** Helper panel on the Schedule (day) page and the Dashboard: text
+  box, synchronous "Thinking…" state, mapped errors (rate limited,
+  not-configured, unavailable, unparseable), clarification question with an
+  answer box and resubmit. The confirm card shows each item in plain words
+  (kind, local time, recurrence, private badge), editable title/time/date,
+  approve-subset checkboxes, highlighted assumptions and warnings, and
+  displaced/dropped sessions as plain sentences. Commitments and deadlines
+  now render as fixed blocks/chips on the day view (private = lock + text).
+  "Voice input is coming soon — typing only for now." No voice claims, no
+  fake data.
+- **Stale-preview limitation (deliberate):** the displaced/dropped preview
+  is computed at draft time and is **not** recomputed at confirm. If the day
+  changes between draft and approve, the numbers shown can be stale; the
+  items themselves are still created exactly as displayed. Recomputing at
+  confirm is future work, not built tonight.
+- **Live verification (real browser, real model):** seeded local stack;
+  the example dictation drafted 3 items with assumptions, edit of a title
+  stuck, confirm added them, the day API returned the 20:00 workout block,
+  the fixed row rendered it (a caption line was added after review because
+  60-minute blocks truncated the label), reject discarded a second draft,
+  "something in the morning" produced a clarification question, and with
+  the key removed the panel degrades to a disabled "isn't switched on"
+  state. 390px emulation: no horizontal overflow. Suites: backend **157
+  passed**, frontend **29 passed**, tsc clean, `alembic check` clean.
+
 ## Needs a decision
 
 1. **Settled in Phase 1.5:** `scratch/` is ignored and the scripts live in
