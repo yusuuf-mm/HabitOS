@@ -2,10 +2,11 @@
 import dataclasses
 import logging
 from datetime import datetime, timedelta
+from datetime import date
 from typing import List
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, get_db
@@ -139,6 +140,55 @@ async def list_items(
     """Owner's list, oldest first; private items appear only in detail view."""
     items = await list_owned_items(db, current_user.id)
     return [item_to_response(item) for item in items if not item.is_private]
+
+
+@router.get("/day")
+async def items_for_day(
+    target_date: date = Query(..., alias="date"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list:
+    """Owner's commitments/deadlines landing on one date (private included)."""
+    own_items = await list_owned_items(db, current_user.id)
+    commitments: list[dict] = []
+    deadlines: list[dict] = []
+    for item in own_items:
+        kind = getattr(item, "kind", None)
+        if kind == "commitment":
+            occ = occurrence_on(item, target_date)
+            if occ is None:
+                continue
+            start_minutes = occ[0] * 15
+            end_minutes = occ[1] * 15
+            commitments.append(
+                {
+                    "itemId": str(item.id),
+                    "kind": "commitment",
+                    "title": item.title,
+                    "isPrivate": bool(item.is_private),
+                    "startTime": (
+                        f"{start_minutes // 60:02d}:{start_minutes % 60:02d}"
+                    ),
+                    "endTime": (
+                        f"{end_minutes // 60:02d}:{end_minutes % 60:02d}"
+                    ),
+                    "date": target_date.isoformat(),
+                }
+            )
+        elif kind == "deadline":
+            if getattr(item, "due_on", None) != target_date:
+                continue
+            deadlines.append(
+                {
+                    "itemId": str(item.id),
+                    "kind": "deadline",
+                    "title": item.title,
+                    "isPrivate": bool(item.is_private),
+                    "dueOn": target_date.isoformat(),
+                }
+            )
+    commitments.sort(key=lambda entry: entry["startTime"])
+    return commitments + deadlines
 
 
 @router.get("/{item_id}", response_model=ItemResponse)

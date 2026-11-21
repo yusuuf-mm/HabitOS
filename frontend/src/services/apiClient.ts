@@ -21,6 +21,13 @@ import type {
   AnalyticsData,
   ApiResponse,
 } from "@/types";
+import type {
+  HelperStatus,
+  HelperDraftResponse,
+  HelperConfirmResponse,
+  HelperDraftItem,
+  HelperDayItem,
+} from "@/types/helper";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 
 // =============================================================================
@@ -174,6 +181,38 @@ export const analyticsApi = {
 };
 
 // =============================================================================
+// HELPER API
+// =============================================================================
+
+export const helperApi = {
+  async getStatus(): Promise<HelperStatus> {
+    return apiGet<HelperStatus>("/helper/status");
+  },
+
+  async draft(transcript: string): Promise<HelperDraftResponse> {
+    return apiPost<HelperDraftResponse>("/helper/draft", { transcript });
+  },
+
+  async confirm(payload: {
+    draftId: string;
+    transcript: string;
+    items: HelperDraftItem[];
+  }): Promise<HelperConfirmResponse> {
+    return apiPost<HelperConfirmResponse>("/helper/confirm", payload);
+  },
+};
+
+// =============================================================================
+// ITEMS API
+// =============================================================================
+
+export const itemsApi = {
+  async getDay(date: string): Promise<HelperDayItem[]> {
+    return apiGet<HelperDayItem[]>(`/items/day?date=${date}`);
+  },
+};
+
+// =============================================================================
 // UNIFIED API EXPORT
 // =============================================================================
 
@@ -183,6 +222,8 @@ export const apiClient = {
   optimization: optimizationApi,
   schedule: scheduleApi,
   analytics: analyticsApi,
+  helper: helperApi,
+  items: itemsApi,
 };
 
 export default apiClient;

@@ -1001,6 +1001,107 @@ CI initially caught model/migration drift on the items timestamps
 the migration and the model; run `44426172912` on `b953370` is fully green
 (all five jobs).
 
+## Step 2+3 — provider layer and model benchmark (2026-11-19)
+
+Branch `feat/helper`. Step 4 not started.
+
+- **Provider.** `backend/app/services/llm.py`: key from settings (boots
+  without it, fails clearly only when used), OpenAI-compatible NVIDIA
+  endpoint, per-model retries (429/5xx/timeout, 1/2/4s backoff), fast→strong
+  fallback, status-only errors. The key never appears in code, logs, test
+  output or any committed file (scanned). 5 mocked unit tests pass.
+- **The named candidates are gone.** All four (nemotron-3-nano-30b-a3b,
+  gpt-oss-20b, nemotron-3-super-120b-a12b, llama-3.3-70b-instruct) return
+  HTTP 410 — end-of-life 2026-08-26 on NVIDIA's hosted API. Benchmarked the
+  same-tier models this key serves instead (10 messy dictations, 3,000-token
+  budget — reasoning models emit nothing at 800; repeated passes for the
+  shortlist):
+
+  | Model | Pass (runs) | Median | p95 | Max |
+  |---|---|---|---|---|
+  | nemotron-3.5-bolt-e4b | 4, 4 | 1.18s | 3.58s | 4.62s |
+  | nemotron-3-nano-omni-30b-a3b-reasoning | 9, 7, 9 | 4.83s | 16.09s | 18.05s |
+  | nemotron-3-ultra-550b-a55b | 8 | 6.04s | — | — |
+  | nemotron-3.5-lightning-30b-a3b | 8, 6, 8 | 9.55s | 20.38s | 27.16s |
+  | kimi-k3.1-pro | timeout >900s / 10 calls | — | — | — |
+  | gemma-3-12b-it / 4b-it | listed but chat 404 | — | — | — |
+
+- **Recommendation (settings defaults updated):** primary
+  `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` — the only model to clear
+  9/10, though inconsistently (7–9 across runs; failures are
+  over-clarification and one Sunday-date slip); fallback
+  `nvidia/nemotron-3-ultra-550b-a55b` (8/10, 6.0s, failures are
+  over-clarification, which the helper's clarify path absorbs). Bolt is the
+  latency champion (p95 3.6s) but stays at ~4/10 strict, ~7/10 with tolerant
+  parsing — below the bar. Kimi is unusable at this latency.
+
+## Step 4 — helper endpoint (draft → confirm) (2026-11-19)
+
+Branch `feat/helper`. Text first; no audio stored anywhere (there is no
+audio path), and the transcript is stored only on confirm.
+
+- **Draft** (`POST /helper/draft`): transcript → LLM (primary model, 3,000
+  tokens — reasoning models starve at the provider default and return
+  nothing, which the first live smoke caught) → tolerant JSON parse →
+  per-kind validation (items schemas; habits against a habit draft schema)
+  → rejected list for unknown kinds or missing required fields (never
+  guessed) → clarify passthrough → solver preview of displaced/dropped
+  sessions per commitment date. Writes nothing.
+- **Confirm** (`POST /helper/confirm`): re-validates everything server-side,
+  creates commitments/deadlines as items and habits as behaviours, and
+  stores the transcript in `helper_confirmations`, keyed `(user_id,
+  draft_id)` so a double confirm returns the original ids instead of
+  duplicating rows. Migration `d0e1f2a3b4c5` (new head).
+- **Injection posture:** the system prompt treats the transcript as data,
+  never instructions; output is constrained to validated draft JSON; the
+  confirm path re-validates, so an injected instruction has no write path.
+  Tested with a delete-all dictation and an `admin_delete` kind.
+- **Verification:** 8 helper tests (mocked LLM) + live smoke against the
+  real model on in-memory storage: the example dictation produced the
+  deadline (2026-11-16), the 3-day hospital commitment (assumed 120 minutes,
+  named in assumptions), and the workout; confirm stored 3 items.
+  Full suite **150 passed**; Postgres migration cycle **51/51** with the new
+  head; `alembic check` clean; SQLite cycle clean for the new table.
+
+## Step 5 — helper UI, end to end (2026-11-21)
+
+Branch `feat/helper`. The supervised helper now works from the day view.
+
+- **Hardening.** Transcript cap 4,000 chars with a clear 422; per-user draft
+  rate limit (10/min default, configurable); draft now retries the primary
+  once on unparseable output, then falls back to the strong model (tested
+  with a garbage-speaking fake primary: calls were [fast, fast, strong]).
+  `GET /helper/status` reports configured-or-not without leaking the key.
+- **Habits decision (safe option):** the helper does **not** create
+  behaviours. A habit in a draft comes back as `unsupported` — "created in
+  the habit form for now" — because the defaults it would need (health
+  category, no objective impacts, dormant energy cost) would be silent
+  guesses attached to the user's plan. Confirming a habit item is a 422.
+- **UI.** Helper panel on the Schedule (day) page and the Dashboard: text
+  box, synchronous "Thinking…" state, mapped errors (rate limited,
+  not-configured, unavailable, unparseable), clarification question with an
+  answer box and resubmit. The confirm card shows each item in plain words
+  (kind, local time, recurrence, private badge), editable title/time/date,
+  approve-subset checkboxes, highlighted assumptions and warnings, and
+  displaced/dropped sessions as plain sentences. Commitments and deadlines
+  now render as fixed blocks/chips on the day view (private = lock + text).
+  "Voice input is coming soon — typing only for now." No voice claims, no
+  fake data.
+- **Stale-preview limitation (deliberate):** the displaced/dropped preview
+  is computed at draft time and is **not** recomputed at confirm. If the day
+  changes between draft and approve, the numbers shown can be stale; the
+  items themselves are still created exactly as displayed. Recomputing at
+  confirm is future work, not built tonight.
+- **Live verification (real browser, real model):** seeded local stack;
+  the example dictation drafted 3 items with assumptions, edit of a title
+  stuck, confirm added them, the day API returned the 20:00 workout block,
+  the fixed row rendered it (a caption line was added after review because
+  60-minute blocks truncated the label), reject discarded a second draft,
+  "something in the morning" produced a clarification question, and with
+  the key removed the panel degrades to a disabled "isn't switched on"
+  state. 390px emulation: no horizontal overflow. Suites: backend **157
+  passed**, frontend **29 passed**, tsc clean, `alembic check` clean.
+
 ## Needs a decision
 
 1. **Settled in Phase 1.5:** `scratch/` is ignored and the scripts live in

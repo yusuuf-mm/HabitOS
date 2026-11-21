@@ -21,6 +21,7 @@ from app.api.v1 import (
     analytics_router,
     telemetry_router,
     items_router,
+    helper_router,
 )
 from app.api.v1.ws_route import router as ws_router
 from app.schemas import HealthCheckResponse, ErrorResponse
@@ -189,6 +190,7 @@ app.include_router(schedule_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(telemetry_router, prefix="/api/v1")
 app.include_router(items_router, prefix="/api/v1")
+app.include_router(helper_router, prefix="/api/v1")
 app.include_router(ws_router)
 
 

@@ -1,14 +1,16 @@
 import { useMemo } from "react";
-import { Clock, CheckCircle2, Circle, Timer } from "lucide-react";
+import { Clock, CheckCircle2, Circle, Timer, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DailySchedule, ScheduledBehavior } from "@/types";
+import type { HelperDayItem } from "@/types/helper";
 
 interface ScheduleViewProps {
   schedule: DailySchedule;
   onMarkComplete?: (scheduledBehaviorId: string) => void;
   onMarkIncomplete?: (scheduledBehaviorId: string) => void;
+  fixedItems?: HelperDayItem[];
 }
 
 const MINUTES_PER_PERIOD = 15;
@@ -70,7 +72,18 @@ function mergeConsecutive(behaviors: ScheduledBehavior[]): MergedBlock[] {
   return blocks;
 }
 
-function TimelineTrack({ blocks }: { blocks: MergedBlock[] }) {
+interface FixedBlock {
+  itemId: string;
+  title: string;
+  isPrivate: boolean;
+  startTime: string;
+  endTime: string;
+  startMin: number;
+  endMin: number;
+}
+
+function TimelineTrack({ blocks, fixed }: { blocks: MergedBlock[]; fixed?: FixedBlock[] }) {
+  const fixedBlocks = fixed ?? [];
   const totalMinutes = HOURS_IN_DAY * 60;
 
   return (
@@ -135,6 +148,51 @@ function TimelineTrack({ blocks }: { blocks: MergedBlock[] }) {
         })}
       </div>
 
+      {fixedBlocks.length > 0 && (
+        <div className="mt-6">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Fixed
+          </p>
+          <div className="relative h-12">
+            {fixedBlocks.map((block) => {
+              const left = (block.startMin / totalMinutes) * 100;
+              const width = ((block.endMin - block.startMin) / totalMinutes) * 100;
+              return (
+                <div
+                  key={block.itemId}
+                  className="absolute top-0 h-full rounded-lg border border-dashed border-zinc-400 bg-zinc-100 px-2 flex items-center gap-1 overflow-hidden dark:border-zinc-500 dark:bg-zinc-800/60"
+                  style={{ left: `${left}%`, width: `${Math.max(width, 1.5)}%` }}
+                  title={`${block.title}: ${block.startTime} - ${block.endTime}`}
+                >
+                  {block.isPrivate && (
+                    <span className="shrink-0 flex items-center gap-1">
+                      <Lock className="h-3 w-3 text-muted-foreground" />
+                      <span className="sr-only">private</span>
+                    </span>
+                  )}
+                  {width > 4 && (
+                    <span className="text-[10px] font-medium truncate text-foreground">
+                      {block.title} · {block.startTime}–{block.endTime}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <ul className="mt-2 space-y-1">
+            {fixedBlocks.map((block) => (
+              <li
+                key={`caption-${block.itemId}`}
+                className="text-xs text-muted-foreground"
+              >
+                {block.title} · {block.startTime}–{block.endTime}
+                {block.isPrivate ? " · Private" : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Bottom axis labels */}
       <div className="flex justify-between mt-6 px-1">
         <span className="text-[10px] font-mono text-muted-foreground/40">00:00</span>
@@ -151,7 +209,22 @@ export function ScheduleView({
   schedule,
   onMarkComplete,
   onMarkIncomplete,
+  fixedItems,
 }: ScheduleViewProps) {
+  const fixed = fixedItems ?? [];
+  const deadlines = fixed.filter((i) => i.kind === "deadline");
+  const commitments = fixed.filter((i) => i.kind === "commitment");
+  const fixedBlocks: FixedBlock[] = commitments
+    .filter((i) => i.startTime && i.endTime)
+    .map((i) => ({
+      itemId: i.itemId,
+      title: i.title,
+      isPrivate: i.isPrivate,
+      startTime: i.startTime as string,
+      endTime: i.endTime as string,
+      startMin: timeToMinutes(i.startTime as string),
+      endMin: timeToMinutes(i.endTime as string),
+    }));
   const blocks = useMemo(
     () => mergeConsecutive(schedule.scheduledBehaviors),
     [schedule.scheduledBehaviors],
@@ -198,8 +271,31 @@ export function ScheduleView({
         </Badge>
       </div>
 
+      {/* Deadline chips for today */}
+      {deadlines.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {deadlines.map((d) => (
+            <span
+              key={d.itemId}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground"
+            >
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              Deadline today: {d.title}
+              {d.isPrivate && (
+                <span className="inline-flex items-center gap-1">
+                  <Lock className="h-3 w-3 text-muted-foreground" />
+                  <span className="sr-only">private</span>
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Timeline track */}
-      {blocks.length > 0 && <TimelineTrack blocks={blocks} />}
+      {(blocks.length > 0 || fixedBlocks.length > 0) && (
+        <TimelineTrack blocks={blocks} fixed={fixedBlocks} />
+      )}
 
       {/* Block list */}
       {blocks.length === 0 ? (

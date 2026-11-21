@@ -8,8 +8,10 @@ from .optimization import OptimizationRun, OptimizationStatus, SolverType, Sched
 from .tracking import CompletionLog
 from .telemetry import HabitTelemetry
 from .item import Item
+from .helper import HelperConfirmation
 
 __all__ = [
+    "HelperConfirmation",
     "Item",
     "User",
     "Behavior",

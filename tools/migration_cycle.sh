@@ -59,7 +59,7 @@ echo "  FKs before upgrade: $(fks | tr '\n' ' ')"
 
 echo "== STEP 3: upgrade head =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "c9d0e1f2a3b4"
+check "revision" "$(q 'select version_num from alembic_version')" "d0e1f2a3b4c5"
 check "history rows survive upgrade" "$(counts)" "1/1/1"
 echo "  objective_impacts rows:"
 q "select objective_type||'='||impact_score from objective_impacts order by objective_type;" | sed 's/^/    /'
@@ -107,7 +107,7 @@ check "objective_impacts dropped" "$(q "select count(*) from information_schema.
 
 echo "== STEP 6: upgrade head again =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "c9d0e1f2a3b4"
+check "revision" "$(q 'select version_num from alembic_version')" "d0e1f2a3b4c5"
 check "history rows survive second upgrade" "$(counts)" "1/1/1"
 check "objective_impacts count" "$(q 'select count(*) from objective_impacts')" "3"
 check "health impact" "$(q "select impact_score from objective_impacts where objective_type='HEALTH'")" "0.9"
@@ -125,7 +125,7 @@ check "completion FK restored" "$(q "select count(*) from pg_constraint where co
 
 echo "== STEP 8: upgrade head again =="
 $RUN alembic upgrade head 2>&1 | tail -4 || FAILED=1
-check "revision" "$(q 'select version_num from alembic_version')" "c9d0e1f2a3b4"
+check "revision" "$(q 'select version_num from alembic_version')" "d0e1f2a3b4c5"
 check "history rows survive second upgrade" "$(counts)" "1/1/1"
 check "existing users default to UTC" "$(q "select timezone from users limit 1")" "UTC"
 check "per-revision identity constraint in place" "$(q "select count(*) from pg_constraint where conname='uq_scheduled_behaviors_session_revision'")" "1"
