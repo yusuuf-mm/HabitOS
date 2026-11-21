@@ -6,6 +6,7 @@ from .schedule import router as schedule_router
 from .analytics import router as analytics_router
 from .telemetry import router as telemetry_router
 from .items import router as items_router
+from .helper import router as helper_router
 
 __all__ = [
     "auth_router",
@@ -15,4 +16,5 @@ __all__ = [
     "analytics_router",
     "telemetry_router",
     "items_router",
+    "helper_router",
 ]
