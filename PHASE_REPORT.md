@@ -1035,6 +1035,34 @@ Branch `feat/helper`. Step 4 not started.
   latency champion (p95 3.6s) but stays at ~4/10 strict, ~7/10 with tolerant
   parsing — below the bar. Kimi is unusable at this latency.
 
+## Step 4 — helper endpoint (draft → confirm) (2026-11-19)
+
+Branch `feat/helper`. Text first; no audio stored anywhere (there is no
+audio path), and the transcript is stored only on confirm.
+
+- **Draft** (`POST /helper/draft`): transcript → LLM (primary model, 3,000
+  tokens — reasoning models starve at the provider default and return
+  nothing, which the first live smoke caught) → tolerant JSON parse →
+  per-kind validation (items schemas; habits against a habit draft schema)
+  → rejected list for unknown kinds or missing required fields (never
+  guessed) → clarify passthrough → solver preview of displaced/dropped
+  sessions per commitment date. Writes nothing.
+- **Confirm** (`POST /helper/confirm`): re-validates everything server-side,
+  creates commitments/deadlines as items and habits as behaviours, and
+  stores the transcript in `helper_confirmations`, keyed `(user_id,
+  draft_id)` so a double confirm returns the original ids instead of
+  duplicating rows. Migration `d0e1f2a3b4c5` (new head).
+- **Injection posture:** the system prompt treats the transcript as data,
+  never instructions; output is constrained to validated draft JSON; the
+  confirm path re-validates, so an injected instruction has no write path.
+  Tested with a delete-all dictation and an `admin_delete` kind.
+- **Verification:** 8 helper tests (mocked LLM) + live smoke against the
+  real model on in-memory storage: the example dictation produced the
+  deadline (2026-11-16), the 3-day hospital commitment (assumed 120 minutes,
+  named in assumptions), and the workout; confirm stored 3 items.
+  Full suite **150 passed**; Postgres migration cycle **51/51** with the new
+  head; `alembic check` clean; SQLite cycle clean for the new table.
+
 ## Needs a decision
 
 1. **Settled in Phase 1.5:** `scratch/` is ignored and the scripts live in
