@@ -132,6 +132,20 @@ function itemTitle(entry: unknown): string {
 const warnBox =
   "rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100";
 
+function describeAddedItems(items: HelperDraftItem[]): string {
+  if (items.length === 0) return "Added nothing.";
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    const kind = item.kind === "commitment" || item.kind === "deadline" ? item.kind : "item";
+    counts[kind] = (counts[kind] ?? 0) + 1;
+  }
+  const parts = Object.entries(counts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([kind, count]) => `${count} ${kind}${count === 1 ? "" : "s"}`);
+  const names = items.map((item) => item.title).filter(Boolean);
+  return `Added ${parts.join(" and ")}${names.length <= 2 && names.length > 0 ? `: ${names.join(", ")}` : ""}.`;
+}
+
 export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }: HelperPanelProps) {
   const [status, setStatus] = useState<HelperStatus | null>(null);
   const [statusFailed, setStatusFailed] = useState(false);
@@ -145,6 +159,7 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
   const [answer, setAnswer] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [addedSummary, setAddedSummary] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +213,7 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
     onStateChange?.("thinking");
     setErrorMessage(null);
     setSuccessMessage(null);
+    setAddedSummary(null);
     try {
       const resp = await apiClient.helper.draft(text);
       applyDraft(resp, text);
@@ -238,6 +254,7 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
       setClarify(null);
       setPhase("done");
       setSuccessMessage("Added to your plan.");
+      setAddedSummary(describeAddedItems(items));
       onStateChange?.("done");
       onConfirmed?.();
     } catch (error) {
@@ -254,6 +271,7 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
     setClarify(null);
     setAnswer("");
     setErrorMessage(null);
+    setAddedSummary(null);
     setPhase("idle");
   };
 
@@ -285,7 +303,22 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
 
       <div aria-live="polite" role="status" className="text-sm text-muted-foreground">
         {phase === "thinking" && "Thinking…"}
-        {successMessage && !errorMessage && <span>{successMessage}</span>}
+        {successMessage && !errorMessage && (
+          <span className="block space-y-1">
+            <span className="block">{successMessage}</span>
+            {addedSummary && (
+              <span className="block text-xs text-muted-foreground">
+                {addedSummary}{" "}
+                <a
+                  href="/optimization"
+                  className="font-medium text-accent underline underline-offset-2"
+                >
+                  Plan my week to fit it in
+                </a>
+              </span>
+            )}
+          </span>
+        )}
       </div>
 
       {errorMessage && (

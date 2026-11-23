@@ -53,6 +53,35 @@
     --sidebar-accent-foreground: 40 20% 98%;
     --sidebar-border: 24 10% 16%;
     --sidebar-ring: 170 45% 36%;
+
+    /* Fixed objective palette — Okabe–Ito inspired, mirrored in objectivePalette.ts */
+    --objective-health: #0072B2;
+    --objective-health-ink: #005A8F;
+    --objective-health-tint: #E6F1F7;
+    --objective-productivity: #009E73;
+    --objective-productivity-ink: #006B4C;
+    --objective-productivity-tint: #E4F4EE;
+    --objective-learning: #CC79A7;
+    --objective-learning-ink: #8E3E67;
+    --objective-learning-tint: #F7EAF2;
+    --objective-wellness: #E69F00;
+    --objective-wellness-ink: #7A5000;
+    --objective-wellness-tint: #FBF1DE;
+    --objective-social: #D55E00;
+    --objective-social-ink: #9C4300;
+    --objective-social-tint: #FBEDE6;
+    --objective-financial: #56B4E9;
+    --objective-financial-ink: #175E82;
+    --objective-financial-tint: #E7F4FA;
+    --objective-creativity: #F0E442;
+    --objective-creativity-ink: #6B5A00;
+    --objective-creativity-tint: #F8F4DA;
+    --objective-mindfulness: #52525B;
+    --objective-mindfulness-ink: #27272A;
+    --objective-mindfulness-tint: #ECECEE;
+    --objective-neutral: #71717A;
+    --objective-neutral-ink: #3F3F46;
+    --objective-neutral-tint: #F1F1F2;
   }
 
   .dark {
@@ -101,6 +130,34 @@
     --sidebar-accent-foreground: 40 15% 92%;
     --sidebar-border: 24 8% 10%;
     --sidebar-ring: 170 50% 42%;
+
+    --objective-health: #56B4E9;
+    --objective-health-ink: #A8DDFF;
+    --objective-health-tint: #102A3A;
+    --objective-productivity: #4FC09B;
+    --objective-productivity-ink: #7FE3C2;
+    --objective-productivity-tint: #0E2F27;
+    --objective-learning: #E0A3C8;
+    --objective-learning-ink: #F0B8DA;
+    --objective-learning-tint: #321F2B;
+    --objective-wellness: #F0B429;
+    --objective-wellness-ink: #FFD27F;
+    --objective-wellness-tint: #352A14;
+    --objective-social: #EF8B63;
+    --objective-social-ink: #FFB28C;
+    --objective-social-tint: #352018;
+    --objective-financial: #8ED4F5;
+    --objective-financial-ink: #BEE9FF;
+    --objective-financial-tint: #102B38;
+    --objective-creativity: #F0E442;
+    --objective-creativity-ink: #F5E27A;
+    --objective-creativity-tint: #302C12;
+    --objective-mindfulness: #A1A1AA;
+    --objective-mindfulness-ink: #E4E4E7;
+    --objective-mindfulness-tint: #27272A;
+    --objective-neutral: #A1A1AA;
+    --objective-neutral-ink: #E4E4E7;
+    --objective-neutral-tint: #27272A;
   }
 }
 
@@ -128,6 +185,38 @@
   /* Premium Card — ultra-light borders, no heavy shadows */
   .dashboard-card {
     @apply bg-card rounded-xl border border-border p-6;
+  }
+
+  /* Week calendar: 72px per hour makes a 15-minute block 18px tall. */
+  .calendar-column {
+    --calendar-hour: 72px;
+    height: calc(19 * var(--calendar-hour));
+    background-image:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(var(--calendar-hour) / 4 - 1px),
+        hsl(var(--border) / 0.55) calc(var(--calendar-hour) / 4 - 1px),
+        hsl(var(--border) / 0.55) calc(var(--calendar-hour) / 4)
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(var(--calendar-hour) - 1px),
+        hsl(var(--border) / 0.95) calc(var(--calendar-hour) - 1px),
+        hsl(var(--border) / 0.95) var(--calendar-hour)
+      );
+  }
+
+  /* Commitments keep a neutral, hatched outline even in colour-blind modes. */
+  .commitment-hatch {
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0,
+      transparent 5px,
+      hsl(var(--muted-foreground) / 0.22) 5px,
+      hsl(var(--muted-foreground) / 0.22) 6px
+    );
   }
 
   .dashboard-card-elevated {
@@ -173,6 +262,10 @@
 
   .page-content {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16;
+  }
+
+  .page-content-wide {
+    @apply max-w-none;
   }
 
   .page-header {
@@ -353,5 +446,16 @@
     background: rgba(10,12,18,0.92);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

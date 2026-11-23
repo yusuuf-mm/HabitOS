@@ -1,4 +1,6 @@
 import { HabitOSLogo } from "@/components/HabitOSLogo";
+import { ObjectiveShape } from "@/components/ObjectiveShape";
+import { resolveObjective } from "@/lib/objectivePalette";
 import type { HeroObjective } from "@/types/dashboard";
 
 interface LifeMapProps {
@@ -31,7 +33,7 @@ export function LifeMap({ objectives, unavailable = false }: LifeMapProps) {
     <section aria-label="Life map" className="dashboard-card">
       <h2 className="text-sm font-semibold">Life map</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        Each orb is an objective's share of the plans for this week, averaged across all seven days.
+        Each orb is an objective&apos;s share of the plans for this week, averaged across all seven days.
       </p>
       <div className="relative mx-auto mt-2 max-w-[340px]">
         <div
@@ -50,6 +52,7 @@ export function LifeMap({ objectives, unavailable = false }: LifeMapProps) {
             <HabitOSLogo width={24} height={24} className="text-accent-foreground" />
           </g>
           {objectives.map((obj, i) => {
+            const objective = resolveObjective(obj.name);
             const angle = (i / objectives.length) * Math.PI * 2 - Math.PI / 2;
             const x = CX + ORBIT_R * Math.cos(angle);
             const y = CY + ORBIT_R * Math.sin(angle);
@@ -60,7 +63,21 @@ export function LifeMap({ objectives, unavailable = false }: LifeMapProps) {
             const labelY = y < CY ? y - r - 7 : y + r + 13;
             return (
               <g key={obj.name}>
-                <circle cx={x} cy={y} r={r} fill="currentColor" className="text-accent/70" />
+                <svg
+                  x={x - r}
+                  y={y - r}
+                  width={r * 2}
+                  height={r * 2}
+                  viewBox="0 0 16 16"
+                  aria-hidden="true"
+                >
+                  <ObjectiveShape
+                    shape={objective.shape}
+                    color={objective.swatch}
+                    stroke={objective.ink}
+                    size={16}
+                  />
+                </svg>
                 <text
                   x={labelX}
                   y={labelY}
@@ -75,11 +92,20 @@ export function LifeMap({ objectives, unavailable = false }: LifeMapProps) {
         </svg>
       </div>
       <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {objectives.map((o) => (
-          <li key={o.name} className="text-xs text-muted-foreground">
-            {o.name}: {Math.round(o.share * 100)}%
-          </li>
-        ))}
+        {objectives.map((o) => {
+          const objective = resolveObjective(o.name);
+          return (
+            <li key={o.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ObjectiveShape
+                shape={objective.shape}
+                color={objective.swatch}
+                stroke={objective.ink}
+                size={12}
+              />
+              {o.name}: {Math.round(o.share * 100)}%
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
