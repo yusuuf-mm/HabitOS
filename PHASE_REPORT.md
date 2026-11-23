@@ -1102,6 +1102,130 @@ Branch `feat/helper`. The supervised helper now works from the day view.
   state. 390px emulation: no horizontal overflow. Suites: backend **157
   passed**, frontend **29 passed**, tsc clean, `alembic check` clean.
 
+## Dashboard upgrade — data truth and week view (2026-11-23)
+
+Branch `feat/dashboard` from `main`. The dashboard now shows the today/week
+plan, a compact interactive week calendar (Mon-start, 05:00–24:00), upcoming
+commitments/deadlines, and view/edit/delete for an item with an explicit confirm
+step and a private toggle. All pre-existing dashboard functions remain reachable.
+
+### Every number names a source
+
+| Surface | Source | Notes |
+|---|---|---|
+| Plan health rail (7/30 day range) | `GET /api/v1/analytics/summary?days=N` → `DashboardSummary` | Range param now plumbed through; `completionRate`, `released`, `systemDropped` from `compute_range` (`docs/METRIC.md`). |
+| Daily trend tiles + sparkline | `GET /api/v1/analytics/series?days=N` (new) | Per-day `completed/baseline/released/dropped/completionRate/plannedMinutes` from `compute_day` + `resolve_day_plan`. Tiles show **range totals with a daily sparkline**, not the latest partial day. |
+| Week calendar sessions | `GET /api/v1/schedule?date=…` × 7 | Mon–Sun of the selected week; `releasedAt` and `isCompleted` come from the row. |
+| Fixed commitments/deadlines on a day or in Upcoming | `GET /api/v1/items/range?from=…&to=…` (new) | Owner-scoped via `list_owned_items`; private items included for the owner only. Recurrences expanded by `occurrence_on`; 31-day cap. |
+| Life map objective shares | Each day's `objectiveScores` from the 7 schedule responses | Averaged across days that reported the objective. The optimization-history endpoint is deliberately **not** used: its runs are dated by creation time and can be empty for a fully planned week. |
+| Assistant status / orb state | `GET /api/v1/helper/status` | Unavailable state is distinct; mic is visible but disabled with "Voice is coming soon". |
+| Streak / active behaviors / average score | `GET /api/v1/analytics/summary?days=N` | Unchanged fields, still real DB queries. |
+
+A failed request is never rendered as empty data. Each fetch has its own failure
+flag; a named banner lists exactly which feeds failed and offers Retry. The
+series, upcoming list, and last good per-day schedule are retained on failure; a
+day whose schedule failed is marked "Unavailable" rather than "Nothing planned".
+Race guards on range and week requests discard stale responses.
+
+Commits are excluded from the completion denominator and reported separately, as
+`docs/METRIC.md` requires. Four backend truth fixes back this up:
+
+- `GET /schedule` exposes `releasedAt` (`ScheduledBehaviorResponse`), and a
+  released session renders as "Released" — it is neither pending nor completed.
+- Completion is keyed on `planned_session_id` in `GET /schedule`, in
+  `mark_complete`, in `mark_incomplete`, and in the summary's check. A behaviour
+  scheduled twice in a day is now completed one session at a time.
+- The release route's completion check is scoped to the run as well as the
+  session id.
+- New regression `test_schedule_completion_is_per_session_and_exposes_release`
+  in `backend/tests_integration/test_session_identity.py` pins all four.
+
+### Frontend
+
+New components: `WeekCalendar` (keyboard ArrowUp/Down within a day, Enter/Space
+to open, distinct released/completed styling and labels, unavailable-day state),
+`DayDetailPanel` (session complete/incomplete/release, item view with confirm +
+private toggle, recurring-delete wording, agenda rows open in the same panel),
+`InsightTiles` (range totals, sparkline, failed state), `LifeMap` (SVG orbit over
+the week's averaged `objectiveScores`, label clipping fixed), `PlanHealthRail`,
+and `HelperOrb` (six distinct states, Retry placement, disabled mic). Dead
+`StatsCards.tsx` removed. Voice remains unbuilt; no drag-and-drop rescheduling.
+SVG + CSS only, no new libraries, `motion-safe:` for all animation so
+`prefers-reduced-motion` is respected. Landing tokens reused unchanged.
+
+New/updated frontend regression tests cover: orb unavailable state, released and
+completed session states, ArrowUp/Down, unavailable day, local status update,
+released-action gating, delete failure, recurring-delete wording, agenda-row
+navigation, InsightTiles range totals and failed state, LifeMap, dashboard
+failure banner, and life-map-from-week-schedules. New backend integration test
+`test_dashboard_data.py` covers the series endpoint and the range endpoint.
+
+### Real output — gates
+
+```
+backend:  uv run pytest -q -p no:cacheprovider
+          163 passed, 1 skipped, 1 xpassed, 1 warning in 99.51s
+backend:  uv run alembic check  ->  No new upgrade operations detected.
+frontend: npx tsc --noEmit      ->  clean
+frontend: npm test -- --run     ->  52 passed, 7 files
+frontend: npm run build         ->  ✓ built in 48.74s
+frontend: npm run lint -- --max-warnings=20
+                              ->  0 errors, 11 warnings (all pre-existing)
+```
+
+No schema changes were made in this phase; `alembic check` was re-run with
+Postgres up and reports no drift. `conversation-*.txt` exports are now ignored
+(`.gitignore`), never committed. The temporary metric profiler was removed.
+
+### Real output — live browser verification
+
+Real Edge CDP at three viewports against the local stack (Postgres container,
+backend :8000, Vite :8080), seeded user `test@example.com`. A solve for
+2026-11-23 produced 13 sessions and 8 objectives; the range endpoint returned 4
+fixed entries for the week.
+
+| Viewport | innerWidth | body/doc scrollWidth | Week days | Overflow | Exceptions |
+|---|---|---|---|---|---|
+| 1440×950 | 1440 | 1440 / 1440 | 7 | none | none |
+| 1366×768 | 1366 | 1366 / 1366 | 7 | none | none |
+| 390×844 (mobile override) | 390 | 390 / 390 | 7 | none | none |
+
+Interactions exercised in the browser: opened a pending session, clicked **Mark
+complete** → badge became `COMPLETED` and notice `Marked complete.`, then
+reverted with **Mark incomplete**; opened a fixed item, opened **Edit** → form
+rendered; switched the range chip 7→30 days; only console output was the React
+Router future-flag warning. Screenshots and the machine-readable report are in
+the local temp workspace, not committed.
+
+### Endpoint latency (clean measurement)
+
+The first pass measured 18–20 s for 7d/30d calls. That was **not** the endpoint:
+three stale uvicorn processes were competing for the Postgres pool. After
+stopping them and running one clean backend, direct API timings (Node fetch,
+warm DB) were:
+
+| Endpoint | 7 days | 30 days |
+|---|---|---|
+| `/analytics/summary` | 310–835 ms | 456–481 ms |
+| `/analytics/series` | 339–406 ms | 670–746 ms |
+
+A SQL-level profile of `compute_range` confirmed 7 and 30 queries respectively
+(~125–280 ms including first-query warmup), so the existing per-day queries are
+fine and **metric batching was not introduced**. Documentation: the earlier
+slow numbers were environmental, not a product regression.
+
+### Known gaps (unchanged, deliberate)
+
+- Preview is not recomputed at helper confirm; deadline prep blocks are not
+  turned into sessions; helper-created habits are refused (422); there is no
+  audit row for rejected/failed drafts.
+- Voice input and the full items list page are not built. The mic is visible but
+  disabled with "Voice is coming soon".
+- Muse Wonder / Spark / Ember were unavailable this session; work was done
+  directly with no silent substitution.
+
+---
+
 ## Needs a decision
 
 1. **Settled in Phase 1.5:** `scratch/` is ignored and the scripts live in
