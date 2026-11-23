@@ -4,12 +4,19 @@ from datetime import datetime, timezone, timedelta, date
 from typing import List
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.core import clock
 from app.core.constants import period_to_time, PERIODS_PER_DAY
 from app.api.deps import get_db, get_current_active_user
-from app.services.metrics import compute_range, local_today, recent_days, user_zone
+from app.services.metrics import (
+    compute_day,
+    compute_range,
+    local_today,
+    recent_days,
+    resolve_day_plan,
+    user_zone,
+)
 from app.models import (
     User, 
     Behavior, 
@@ -71,6 +78,7 @@ async def calculate_streak(db: AsyncSession, user_id) -> int:
 async def get_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
+    days: int = Query(7, ge=1, le=30),
 ) -> ApiResponse[DashboardSummary]:
     """Get dashboard summary with real data."""
     # Total and active behaviors (inactive/soft-deleted behaviors are not counted)
@@ -98,7 +106,7 @@ async def get_dashboard_summary(
     # (docs/METRIC.md). The old query counted every scheduled row of every run, so
     # each re-plan added a whole plan to the denominator.
     week_metric = await compute_range(
-        db, current_user, recent_days(7, user_zone(current_user))
+        db, current_user, recent_days(days, user_zone(current_user))
     )
     
     # Average satisfaction score
@@ -151,7 +159,7 @@ async def get_dashboard_summary(
 
     # Check for completions
     completion_result = await db.execute(
-        select(CompletionLog.behavior_id)
+        select(CompletionLog.planned_session_id)
         .join(OptimizationRun, CompletionLog.optimization_run_id == OptimizationRun.id)
         .where(
             and_(
@@ -160,7 +168,9 @@ async def get_dashboard_summary(
             )
         )
     )
-    completed_behavior_ids = {row[0] for row in completion_result.all()}
+    completed_session_ids = {
+        row[0] for row in completion_result.all() if row[0] is not None
+    }
 
     return ApiResponse(
         success=True,
@@ -210,12 +220,48 @@ async def get_dashboard_summary(
                     behavior_name=b.name,
                     time_slot="flexible", # Default for dashboard
                     start_time=period_to_time(sb.time_period % PERIODS_PER_DAY),
-                    is_completed=sb.behavior_id in completed_behavior_ids
+                    is_completed=sb.planned_session_id in completed_session_ids
                 )
                 for sb, b in today_schedule_raw
             ],
         )
     )
+
+
+@router.get("/series")
+async def get_series(
+    days: int = Query(7, ge=1, le=30),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list:
+    """Per-day baseline-anchored metric plus planned minutes, oldest first."""
+    entries = []
+    for day in recent_days(days, user_zone(current_user)):
+        metric = await compute_day(db, current_user, day)
+        plan = await resolve_day_plan(db, current_user, day)
+        planned_minutes = 0
+        if plan.run is not None:
+            sessions_result = await db.execute(
+                select(ScheduledBehavior).where(
+                    ScheduledBehavior.optimization_run_id == plan.run.id
+                )
+            )
+            planned_minutes = sum(
+                session.scheduled_duration
+                for session in sessions_result.scalars().all()
+            )
+        entries.append(
+            {
+                "date": day.isoformat(),
+                "completed": metric.completed,
+                "baseline": metric.baseline,
+                "released": metric.released,
+                "dropped": metric.system_dropped,
+                "completionRate": metric.completion_rate,
+                "plannedMinutes": int(planned_minutes),
+            }
+        )
+    return entries
 
 
 @router.get("/stats", response_model=ApiResponse[DashboardStats])

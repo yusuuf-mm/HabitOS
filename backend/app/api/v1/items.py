@@ -191,6 +191,69 @@ async def items_for_day(
     return commitments + deadlines
 
 
+@router.get("/range")
+async def items_for_range(
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> list:
+    """Owner's commitments/deadlines landing on each date in [from, to]."""
+    if to_date < from_date:
+        raise HTTPException(
+            status_code=422, detail="to must be on or after from"
+        )
+    if (to_date - from_date).days > 30:
+        raise HTTPException(
+            status_code=422, detail="range too large (max 31 days)"
+        )
+    own_items = await list_owned_items(db, current_user.id)
+    entries: list[dict] = []
+    day = from_date
+    while day <= to_date:
+        for item in own_items:
+            kind = getattr(item, "kind", None)
+            if kind == "commitment":
+                occ = occurrence_on(item, day)
+                if occ is None:
+                    continue
+                start_minutes = occ[0] * 15
+                end_minutes = occ[1] * 15
+                entries.append(
+                    {
+                        "date": day.isoformat(),
+                        "itemId": str(item.id),
+                        "kind": "commitment",
+                        "title": item.title,
+                        "isPrivate": bool(item.is_private),
+                        "startTime": (
+                            f"{start_minutes // 60:02d}:{start_minutes % 60:02d}"
+                        ),
+                        "endTime": (
+                            f"{end_minutes // 60:02d}:{end_minutes % 60:02d}"
+                        ),
+                        "warnings": warnings_for(item, own_items, day),
+                    }
+                )
+            elif kind == "deadline":
+                if getattr(item, "due_on", None) != day:
+                    continue
+                entries.append(
+                    {
+                        "date": day.isoformat(),
+                        "itemId": str(item.id),
+                        "kind": "deadline",
+                        "title": item.title,
+                        "isPrivate": bool(item.is_private),
+                        "dueOn": day.isoformat(),
+                        "warnings": [],
+                    }
+                )
+        day += timedelta(days=1)
+    entries.sort(key=lambda entry: (entry["date"], entry.get("startTime") or "99:99"))
+    return entries
+
+
 @router.get("/{item_id}", response_model=ItemResponse)
 async def get_item(
     item_id: UUID,

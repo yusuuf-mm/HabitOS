@@ -275,3 +275,95 @@ async def test_replan_api_keeps_planned_session_id_while_row_ids_change(
         before_item["plannedSessionId"]
     }
     assert all(item["id"] != before_item["id"] for item in after_items)
+
+
+@pytest.mark.asyncio
+async def test_schedule_completion_is_per_session_and_exposes_release(
+    auth_client: AsyncClient, db_session
+):
+    """One behaviour scheduled twice: the two sessions have separate states."""
+    from app.models import Behavior, BehaviorCategory
+    from app.models.optimization import OptimizationRun, ScheduledBehavior
+
+    user_id = await _get_user_id(auth_client)
+
+    behavior = Behavior(
+        user_id=user_id,
+        name="Read",
+        category=BehaviorCategory.LEARNING,
+        min_duration=15,
+        typical_duration=15,
+        max_duration=30,
+        energy_cost=1.0,
+        preferred_time_slots=["morning"],
+    )
+    db_session.add(behavior)
+    await db_session.flush()
+
+    run = OptimizationRun(
+        user_id=user_id,
+        status="completed",
+        solver="linear",
+        start_date=_plan_day(),
+        end_date=_plan_day(),
+        time_periods=96,
+        baseline_revision=1,
+    )
+    db_session.add(run)
+    await db_session.flush()
+
+    first = ScheduledBehavior(
+        optimization_run_id=run.id,
+        behavior_id=behavior.id,
+        time_period=30,
+        scheduled_duration=15,
+    )
+    second = ScheduledBehavior(
+        optimization_run_id=run.id,
+        behavior_id=behavior.id,
+        time_period=40,
+        scheduled_duration=15,
+    )
+    third = ScheduledBehavior(
+        optimization_run_id=run.id,
+        behavior_id=behavior.id,
+        time_period=50,
+        scheduled_duration=15,
+    )
+    db_session.add_all([first, second, third])
+    await db_session.commit()
+
+    async def _items() -> dict:
+        response = await auth_client.get("/api/v1/schedule")
+        assert response.status_code == 200, response.text
+        return {
+            item["id"]: item
+            for item in response.json()["data"]["scheduledBehaviors"]
+        }
+
+    done = await auth_client.post(f"/api/v1/schedule/{first.id}/complete")
+    assert done.status_code == 200, done.text
+    items = await _items()
+    assert items[str(first.id)]["isCompleted"] is True
+    assert items[str(second.id)]["isCompleted"] is False
+
+    # Completing the other session does not change the first one's state.
+    done = await auth_client.post(f"/api/v1/schedule/{second.id}/complete")
+    assert done.status_code == 200, done.text
+    items = await _items()
+    assert items[str(first.id)]["isCompleted"] is True
+    assert items[str(second.id)]["isCompleted"] is True
+
+    # Incomplete targets the named session, not every session of the behaviour.
+    undone = await auth_client.post(f"/api/v1/schedule/{first.id}/incomplete")
+    assert undone.status_code == 200, undone.text
+    items = await _items()
+    assert items[str(first.id)]["isCompleted"] is False
+    assert items[str(second.id)]["isCompleted"] is True
+
+    # A withdrawn session is reported as released, not as an ordinary pending one.
+    third.released_at = plan_now()
+    await db_session.commit()
+    items = await _items()
+    assert items[str(third.id)]["releasedAt"] is not None
+    assert items[str(first.id)]["releasedAt"] is None

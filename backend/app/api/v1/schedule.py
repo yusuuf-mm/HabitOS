@@ -84,14 +84,19 @@ async def get_daily_schedule(
     response_items = []
     total_duration = 0
     
+    # Completion belongs to one planned session, not to the behaviour: the same
+    # behaviour can be scheduled twice in a day and only one of those sessions
+    # may be done (docs/METRIC.md §4).
     completion_result = await db.execute(
-        select(CompletionLog.optimization_run_id, CompletionLog.behavior_id)
+        select(CompletionLog.planned_session_id)
         .where(
             (CompletionLog.user_id == current_user.id) &
             (CompletionLog.optimization_run_id == run.id)
         )
     )
-    completed_behaviors = { (str(c.optimization_run_id), str(c.behavior_id)) for c in completion_result.all() }
+    completed_sessions = {
+        row[0] for row in completion_result.all() if row[0] is not None
+    }
 
     # Items are stored with absolute period indices (0 to PERIODS_PER_DAY - 1).
     day_periods = (target_date - run.start_date).days * PERIODS_PER_DAY
@@ -101,8 +106,8 @@ async def get_daily_schedule(
             start_time = period_to_time(sb.time_period % PERIODS_PER_DAY)
             end_time = period_to_time((sb.time_period % PERIODS_PER_DAY) + (sb.scheduled_duration // 15))
             
-            is_completed = (str(run.id), str(behavior.id)) in completed_behaviors
-            
+            is_completed = sb.planned_session_id in completed_sessions
+
             response_items.append(
                 ScheduledBehaviorResponse(
                     id=sb.id,
@@ -115,6 +120,7 @@ async def get_daily_schedule(
                     duration=sb.scheduled_duration,
                     plannedSessionId=sb.planned_session_id,
                     isCompleted=is_completed,
+                    releasedAt=sb.released_at,
                 )
             )
             total_duration += sb.scheduled_duration
@@ -175,7 +181,7 @@ async def mark_complete(
     log_result = await db.execute(
         select(CompletionLog).where(
             (CompletionLog.user_id == current_user.id) &
-            (CompletionLog.behavior_id == scheduled.behavior_id) &
+            (CompletionLog.planned_session_id == scheduled.planned_session_id) &
             (CompletionLog.optimization_run_id == scheduled.optimization_run_id)
         )
     )
@@ -228,7 +234,7 @@ async def mark_incomplete(
     log_result = await db.execute(
         select(CompletionLog).where(
             (CompletionLog.user_id == current_user.id) &
-            (CompletionLog.behavior_id == scheduled.behavior_id) &
+            (CompletionLog.planned_session_id == scheduled.planned_session_id) &
             (CompletionLog.optimization_run_id == scheduled.optimization_run_id)
         )
     )
@@ -289,6 +295,7 @@ async def release_session(
         select(CompletionLog).where(
             (CompletionLog.user_id == current_user.id)
             & (CompletionLog.planned_session_id == scheduled.planned_session_id)
+            & (CompletionLog.optimization_run_id == scheduled.optimization_run_id)
         )
     )
     if completed.scalars().first():
