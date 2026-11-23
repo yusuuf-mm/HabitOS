@@ -117,6 +117,10 @@ describe("HelperPanel", () => {
     expect(payload.items).toHaveLength(1);
     expect(payload.items[0].title).toBe("Second");
     expect(await screen.findByText(/added to your plan/i)).toBeInTheDocument();
+    expect(screen.getByText(/added 1 deadline: Second/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /plan my week to fit it in/i }),
+    ).toHaveAttribute("href", "/optimization");
   });
 
   it("sends edited values in the confirm payload", async () => {

@@ -46,7 +46,7 @@ export function AppLayout() {
   return (
     <div className="flex min-h-screen bg-background">
       {/* Desktop Sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
@@ -166,8 +166,13 @@ export function AppLayout() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto pt-14 lg:pt-0">
-        <div className="page-content">
+      <main className="min-w-0 flex-1 pt-14 lg:pt-0">
+        <div
+          className={cn(
+            "page-content",
+            location.pathname === "/dashboard" && "page-content-wide",
+          )}
+        >
           <Outlet />
         </div>
       </main>

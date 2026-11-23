@@ -10,6 +10,7 @@ import { LifeMap } from "@/components/LifeMap";
 import { HelperOrb } from "@/components/HelperOrb";
 import { apiClient } from "@/services/apiClient";
 import { addDays, localISODate, mondayOf } from "@/lib/localDate";
+import { highestImpactObjective } from "@/lib/objectivePalette";
 import type { DashboardSummary } from "@/types";
 import type {
   HeroObjective,
@@ -160,9 +161,9 @@ export default function Dashboard() {
             endTime: sb.endTime,
             duration: sb.duration,
             behaviorName: sb.behavior?.name ?? "Session",
-            // Only a real impact on the behaviour counts. The plan's first
-            // objective is not necessarily this session's objective.
-            objectiveName: sb.behavior?.objectiveImpacts?.[0]?.objectiveName,
+            // A behaviour's main objective is the impact with the highest
+            // impact_score, not the first row returned by the API.
+            objectiveName: highestImpactObjective(sb.behavior?.objectiveImpacts)?.objectiveName,
             completed: sb.isCompleted,
             releasedAt: sb.releasedAt ?? null,
           })),

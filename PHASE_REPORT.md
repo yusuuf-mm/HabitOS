@@ -1232,5 +1232,115 @@ slow numbers were environmental, not a product regression.
    `tools/`; the two grading documents are archived in `docs/archive/` with a
    note. Nothing to decide.
 2. **Next, if you want the metric to be real:** a release endpoint and a retire
-   path are needed before release/retire can be counted. Deferred deliberately —
+   path are needed before release/retire can be counted. Deferred deliberately -
    they are product surface, not schema.
+
+---
+
+## Dashboard polish - objective colour and a readable week (2026-11-24)
+
+Branch `feat/dashboard-polish`, created from `main` after PR #6 merged
+(`4edac8a7747b90061f227c8aac7c405927b3bdbf`). No backend, schema or metric
+changes; every value on the screen still comes from the existing dashboard
+feeds.
+
+### The objective is the real highest impact
+
+`objective_impacts` stores one row per `objective_type` with an `impact_score`
+from -1 to 1. The session colour now uses `highestImpactObjective()`: the row
+with the highest finite score, ties broken alphabetically, and no usable score
+means `Unassigned`; it is **not** the first row returned. Tests pin the
+highest-score case, the tie, empty rows and `NaN`.
+
+The palette is fixed and shared by the calendar and life map: eight
+Okabe-Ito-inspired hues, one shape and a short code per objective. Commitments
+stay neutral, dashed and hatched with a lock; deadlines stay flags; released
+sessions stay faded/hatched. Colour is never the only cue. The same values are
+declared in `frontend/src/index.css`; a test reads that file and fails if the
+CSS and `objectivePalette.ts` drift.
+
+| objective | light ink / tint | dark ink / tint |
+|---|---:|---:|
+| Health | 6.40:1 | 10.22:1 |
+| Productivity | 5.76:1 | 9.40:1 |
+| Learning | 5.93:1 | 9.20:1 |
+| Wellness | 6.30:1 | 9.90:1 |
+| Social | 5.71:1 | 8.75:1 |
+| Financial | 6.32:1 | 11.43:1 |
+| Creativity | 6.14:1 | 10.73:1 |
+| Mindfulness | 12.62:1 | 11.74:1 |
+
+All eight clear WCAG AA for normal text (4.5:1); the lowest pair is Social
+light at **5.71:1**. The tests also check each ink against the white card and
+the dark card. The light Creativity swatch is low-contrast as a fill, so its
+orb also carries the darker ink stroke and a cross shape.
+
+### Calendar
+
+- Desktop uses **72 px per hour**, so a 15-minute block is 18 px; the
+  05:00-24:00 grid is 1,368 px tall. The page scrolls, not an inner box, and the
+  dashboard content uses the full width next to a sticky sidebar.
+- Overlapping sessions and commitments share a day cluster and sit side by
+  side; overlap width is computed from the cluster, not hard-coded.
+- Titles can use two lines; the objective code and time moved to a quieter
+  meta line. Axis labels render once on the first day column instead of seven
+  times. The legend lists only objectives present in the visible week and
+  explains commitments, released sessions and deadlines.
+- At 390 px the seven-day strip remains and the seven-column grid is replaced
+  by a single-day agenda. Sessions and commitments are **merged and sorted by
+  start time**, with the deadline flag first; the day agenda also opens from
+  the strip. `data-objective` is present on desktop and mobile session buttons.
+- After the helper confirms, the status now says what was added and offers
+  **Plan my week to fit it in**. Until Part B exists, that link goes to the
+  existing Optimization page.
+
+### Real output - gates
+
+```
+frontend: npx tsc --noEmit      -> clean
+frontend: npm test -- --run     -> 61 passed, 8 files
+frontend: npm run build         -> built in 41.04s
+frontend: npm run lint          -> 0 errors, 12 warnings (existing patterns)
+```
+
+The build warning is the existing >500 kB chunk notice. No new dependency was
+added; the calendar and life map are still SVG + CSS.
+
+### Real browser evidence
+
+The host clock is Tuesday 24 Nov 2026. Because the request asked for the busiest
+day as "Monday today", the page clock was pinned to Monday 23 Nov 2026 10:30
+through CDP. The seeded week is 2026-11-23 to 2026-11-29: **13 sessions, 4
+commitments, 1 deadline, busiest Monday (480 min)**. Screenshots are full-page;
+the visible window was clamped by the 1366x768 screen, so a headless Brave
+session over CDP provided the exact viewports.
+
+| viewport | innerWidth | document scrollWidth | day buttons | session buttons | grid height | overflow |
+|---|---:|---:|---:|---:|---:|---|
+| 1366x768 | 1366 | 1351 | 7 | 13 | 1368 px | none |
+| 1440x950 | 1440 | 1425 | 7 | 13 | 1368 px | none |
+| 390x844 | 390 | 390 | 7 | 13 | mobile agenda | none |
+
+At 390 px the seven-column grid is absent and the agenda heading reads
+`Mon, Nov 23`; the merged order around the morning commitment was
+`Team Sync 07:30-07:45`, `Take father to hospital 08:00-10:00`,
+`Gym Session 10:00-11:30`. `main` computed `overflow-y: visible` at every
+viewport, confirming the page, not an inner pane, scrolls. Reduced motion was
+emulated at 1366x768: `matchMedia('(prefers-reduced-motion: reduce)')` matched,
+the pulse animation name was `none` and its duration `1e-05s`. The console held
+only Vite/React development messages and the React Router future-flag warning;
+no application exceptions.
+
+Screenshots:
+
+- `docs/images/phase5-dashboard-1366x768.png`
+- `docs/images/phase5-dashboard-1440x950.png`
+- `docs/images/phase5-dashboard-390x844.png`
+- `docs/images/phase5-dashboard-reduced-motion.png`
+
+### Not built
+
+"Plan my week" is **not** built in this branch. The helper confirmation uses
+the existing Optimization link as the interim action, as requested. The
+read-only Part B research is separate and stops for approval before any
+seven-day solve or apply/preview UI is added.
