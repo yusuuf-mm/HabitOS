@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/services/apiClient";
 import type { HelperDraftItem, HelperDraftResponse, HelperStatus } from "@/types/helper";
 
+export type HelperOrbState = "idle" | "thinking" | "needsYou" | "done" | "error";
+
 interface HelperPanelProps {
   date: string;
   onConfirmed?: () => void;
+  onStateChange?: (s: HelperOrbState) => void;
+  submitRequest?: { text: string; nonce: number };
 }
 
 type Phase = "idle" | "thinking" | "clarify" | "review" | "confirming" | "done";
@@ -128,7 +132,7 @@ function itemTitle(entry: unknown): string {
 const warnBox =
   "rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100";
 
-export function HelperPanel({ date, onConfirmed }: HelperPanelProps) {
+export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }: HelperPanelProps) {
   const [status, setStatus] = useState<HelperStatus | null>(null);
   const [statusFailed, setStatusFailed] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
@@ -159,12 +163,22 @@ export function HelperPanel({ date, onConfirmed }: HelperPanelProps) {
     };
   }, []);
 
+  const lastNonce = useRef(0);
+  useEffect(() => {
+    if (submitRequest && submitRequest.nonce !== lastNonce.current && submitRequest.text.trim()) {
+      lastNonce.current = submitRequest.nonce;
+      setTranscript(submitRequest.text);
+      void handleDraft(submitRequest.text);
+    }
+  }, [submitRequest]);
+
   const applyDraft = (resp: HelperDraftResponse, baseTranscript: string) => {
     setTranscript(baseTranscript);
     if (resp.clarify) {
       setClarify(resp.clarify);
       setDraft(resp);
       setPhase("clarify");
+      onStateChange?.("needsYou");
       return;
     }
     setDraft(resp);
@@ -176,10 +190,12 @@ export function HelperPanel({ date, onConfirmed }: HelperPanelProps) {
     setSelected(sel);
     setClarify(null);
     setPhase("review");
+    onStateChange?.("needsYou");
   };
 
   const handleDraft = async (text: string) => {
     setPhase("thinking");
+    onStateChange?.("thinking");
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
@@ -188,6 +204,7 @@ export function HelperPanel({ date, onConfirmed }: HelperPanelProps) {
     } catch (error) {
       setErrorMessage(mapHelperError(error));
       setPhase("idle");
+      onStateChange?.("error");
     }
   };
 
@@ -221,10 +238,12 @@ export function HelperPanel({ date, onConfirmed }: HelperPanelProps) {
       setClarify(null);
       setPhase("done");
       setSuccessMessage("Added to your plan.");
+      onStateChange?.("done");
       onConfirmed?.();
     } catch (error) {
       setErrorMessage(mapHelperError(error));
       setPhase("review");
+      onStateChange?.("error");
     }
   };
 
@@ -518,6 +537,9 @@ export function HelperPanel({ date, onConfirmed }: HelperPanelProps) {
               <p className="text-xs text-muted-foreground">
                 Voice input is coming soon — typing only for now.
               </p>
+              <Button type="button" variant="outline" disabled aria-disabled="true">
+                Voice is coming soon
+              </Button>
               <Button
                 type="submit"
                 disabled={phase === "thinking" || !transcript.trim()}

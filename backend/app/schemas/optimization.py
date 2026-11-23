@@ -37,6 +37,10 @@ class ScheduledBehaviorResponse(BaseModel):
     )
     isCompleted: bool = Field(False, validation_alias="is_completed", serialization_alias="isCompleted")
     completedAt: Optional[datetime] = Field(None, validation_alias="completed_at", serialization_alias="completedAt")
+    # Set when the session was withdrawn before it started (docs/METRIC.md §3.2).
+    # A released session is neither completed nor missed; clients must render it
+    # distinctly instead of as an ordinary pending session.
+    releasedAt: Optional[datetime] = Field(None, validation_alias="released_at", serialization_alias="releasedAt")
 
     class Config:
         populate_by_name = True

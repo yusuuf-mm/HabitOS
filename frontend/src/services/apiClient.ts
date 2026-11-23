@@ -28,6 +28,7 @@ import type {
   HelperDraftItem,
   HelperDayItem,
 } from "@/types/helper";
+import type { RangeEntry, SeriesDay, ItemDetail } from "@/types/dashboard";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 
 // =============================================================================
@@ -171,8 +172,12 @@ export const analyticsApi = {
     return apiGet("/analytics/stats");
   },
 
-  async getDashboardSummary(): Promise<ApiResponse<DashboardSummary>> {
-    return apiGet("/analytics/summary");
+  async getDashboardSummary(days?: number): Promise<ApiResponse<DashboardSummary>> {
+    return apiGet(days ? `/analytics/summary?days=${days}` : "/analytics/summary");
+  },
+
+  async getSeries(days: number = 7): Promise<SeriesDay[]> {
+    return apiGet<SeriesDay[]>(`/analytics/series?days=${days}`);
   },
 
   async getAnalytics(period: string = "7d"): Promise<ApiResponse<AnalyticsData>> {
@@ -209,6 +214,22 @@ export const helperApi = {
 export const itemsApi = {
   async getDay(date: string): Promise<HelperDayItem[]> {
     return apiGet<HelperDayItem[]>(`/items/day?date=${date}`);
+  },
+
+  async getRange(from: string, to: string): Promise<RangeEntry[]> {
+    return apiGet<RangeEntry[]>(`/items/range?from=${from}&to=${to}`);
+  },
+
+  async get(id: string): Promise<ItemDetail> {
+    return apiGet<ItemDetail>(`/items/${id}`);
+  },
+
+  async update(id: string, data: Record<string, unknown>): Promise<ItemDetail> {
+    return apiPut<ItemDetail>(`/items/${id}`, data);
+  },
+
+  async remove(id: string): Promise<{ deleted: boolean }> {
+    return apiDelete<{ deleted: boolean }>(`/items/${id}`);
   },
 };
 

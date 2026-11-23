@@ -33,6 +33,9 @@ export interface ScheduledBehavior {
   plannedSessionId: string;
   isCompleted: boolean;
   completedAt?: string;
+  // Set when the user withdrew the session before it started. Such a session is
+  // neither pending nor completed and must not be counted as missed.
+  releasedAt?: string | null;
 }
 
 export interface OptimizationRun {
