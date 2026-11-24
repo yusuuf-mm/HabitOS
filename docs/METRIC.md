@@ -193,21 +193,46 @@ but Step 1 stores no prep sessions, so deadlines stay fully out of the metric.
 `POST /optimization/week/preview` never writes. It solves each plannable date
 with the same problem builder, saved objective weights and commitment blocks as
 a normal day solve, then returns real per-date `added` / `moved` / `dropped`
-sessions against the plan currently shown. A date that cannot be planned is
-reported as `available: false` with a reason; it is never rendered as zero
-changes. Past dates are read-only and appear as unavailable rows.
+sessions against the plan currently shown. The request spans the displayed
+week, but the planner starts at today: past dates come back as unavailable rows
+with `past_day`, and the dialog names the actual range (`Planning Tue 24 to Sun
+29`). A whole past week has no planable day, so the action is disabled. A date
+that cannot be solved — solver busy, protected conflict, infeasible, or over the
+25-behaviour cap — is also reported as `available: false` with its own code and
+plain-language reason. It is never rendered as zero changes; the apply button
+stays enabled while at least one other day is solved.
 
-`POST /optimization/week/apply` rechecks the preview's input fingerprint,
-re-runs the same solves and writes every date in one transaction; any failure
-rolls the whole week back. A frozen today is a partial re-plan at the next
-revision and carries its session identities; future dates are ordinary new day
-plans. Nothing here commits a future baseline or changes the denominator:
-future drafts still have no `C` until their own baseline freezes (§2).
+In an open/future day the removed sessions have **not** been retired: they were
+only in a draft plan, never in `C`, and the UI says "removed from draft", never
+"system dropped". Only a re-plan of a frozen baseline writes `retired_revision`
+and creates `dropped_by_system` (§4). A partly completed today keeps every
+completed, in-progress and released session and its slot: those rows are inputs
+to the partial re-plan, never apparent moves or removals.
+
+Each solved date carries a `resultHash` of its diff **without** generated
+session ids, so identical inputs give identical hashes while a changed commitment
+or goal weighting changes it. `POST /optimization/week/apply` takes `dates` and
+`expectedResults`, rechecks the preview's input fingerprint, re-runs the solves
+for exactly those dates and compares each new hash with the expected one. A
+mismatch returns `409 week_plan_changed` (or `week_plan_stale`) with the new diff
+and writes nothing, so a preview cannot be applied after the underlying plan
+changes. Only the listed dates are written, in one transaction: any failure
+rolls all included days back. `skippedDays` names every date that was not
+applied and why; a solved day with no diff is reported as zero changes, but an
+unavailable day never is. Rollups such as `appliedDays` count only written days.
+
+A frozen today is a partial re-plan at the next revision and carries its session
+identities; future dates are ordinary new day plans. Nothing here commits a
+future baseline or changes the denominator: future drafts still have no `C`
+until their own baseline freezes (§2). `GET /schedule` reports `planSource` as
+`draft`, `committed`, `fallback` or `none`, so the calendar can label future
+days "draft plan" and today's accepted baseline "committed plan".
 
 ## Changelog
 
 | version | change |
 |---|---|
+| v1 (week planning, amended) | Today-to-week-end range with past-day skips; per-day unavailable reasons and partial apply of solved dates only; deterministic result hashes and 409 stale-diff guard; frozen-today protection; "removed from draft" wording for future drafts; `planSource` labels. |
 | v1 (week planning) | Explicit seven-day preview/apply: write-nothing preview, fingerprinted all-or-nothing apply, frozen-today partial re-plan, and unavailable states instead of empty data. |
 | v1 | Session-level denominator frozen at the baseline moment; released sessions leave and are reported; system-dropped sessions stay and are reported separately; re-planning never shrinks the denominator. |
 | v1 (amended) | Baseline open until first session start or 05:00 local, whichever is later; drafts are not re-plans. Deactivating a behaviour before a session starts counts as released. Late completions (before local day end) count and are flagged. Timezone stored per user and used for boundaries. Multi-day rates are summed, not averaged. Known-tension section and `completion_rate_vs_feasible` added. |
