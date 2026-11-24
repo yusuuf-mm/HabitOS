@@ -3,8 +3,8 @@
 The preview is a read-only what-if over the dates the user can still plan. Each
 day uses the same problem builder and solver as the existing routes, so the
 numbers shown come from the same data and the same saved objective weights.
-Apply re-checks a fingerprint of those inputs, re-runs the identical solves and
-writes every day in one transaction; any failure rolls the whole week back.
+Apply accepts only the dates that solved, re-solves them and compares the result
+diff with the preview before writing the accepted days in one transaction.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -51,6 +51,7 @@ from app.schemas.optimization import (
     WeekApplyResult,
     WeekDayApplyResult,
     WeekDayResult,
+    WeekDaySkip,
     WeekPlanningError,
     WeekPreviewResult,
     WeekSession,
@@ -101,6 +102,7 @@ class DayInputs:
     current_period: int | None = None
     frozen_periods: dict[int, dict[int, int]] | None = None
     previous_starts: dict[int, int] | None = None
+    protected_ids: set[UUID] = field(default_factory=set)
 
 
 @dataclass
@@ -113,6 +115,7 @@ class PreparedDay:
     added: list[WeekSession]
     moved: list[WeekSessionMove]
     dropped: list[WeekSession]
+    result_hash: str = ""
 
 
 @dataclass
@@ -137,13 +140,14 @@ def _planning_days(week_start: date, today: date) -> tuple[list[date], list[date
             status_code=422, detail="weekStart must be a Monday."
         )
     days = [week_start + timedelta(days=offset) for offset in range(7)]
-    plannable = [day for day in days if day >= today]
-    if not plannable:
-        raise HTTPException(
-            status_code=422,
-            detail="This week is entirely in the past; choose the current or a future week.",
-        )
-    return days, plannable
+    # An entirely past week is still returned as seven labelled, skipped days
+    # rather than an error, so the dialog can show the range it considered.
+    return days, [day for day in days if day >= today]
+
+
+def _plan_range(days: list[date], plannable: list[date]) -> tuple[date, date]:
+    """Show today through Sunday, or the whole week when it is not current."""
+    return (min(plannable) if plannable else days[0]), days[-1]
 
 
 def _slot(period: int, duration: int) -> WeekSessionSlot:
@@ -254,12 +258,13 @@ async def _partial_inputs(
     all_items = result.all()
 
     completed_result = await db.execute(
-        select(CompletionLog.behavior_id).where(
+        select(CompletionLog.planned_session_id).where(
             (CompletionLog.user_id == user.id)
             & (CompletionLog.optimization_run_id == plan_run.id)
+            & (CompletionLog.planned_session_id.is_not(None))
         )
     )
-    completed_ids = {row[0] for row in completed_result.all()}
+    completed_session_ids = {row[0] for row in completed_result.all()}
 
     now_local = now.astimezone(tz)
     current_period = (now_local.hour * 60 + now_local.minute) // MINUTES_PER_PERIOD
@@ -268,6 +273,7 @@ async def _partial_inputs(
     behaviors_db: list[Behavior] = []
     behavior_index: dict[UUID, int] = {}
     previous_starts: dict[int, int] = {}
+    protected_ids: set[UUID] = set()
 
     for sb, behavior in all_items:
         if behavior.id not in behavior_index:
@@ -276,12 +282,15 @@ async def _partial_inputs(
         idx = behavior_index[behavior.id]
         local_period = sb.time_period % PERIODS_PER_DAY
         blocks = sb.scheduled_duration // MINUTES_PER_PERIOD
+        completed = sb.planned_session_id in completed_session_ids
+        released = sb.released_at is not None
+        in_progress = local_period < current_period < local_period + blocks
+        if completed or released or in_progress:
+            protected_ids.add(sb.planned_session_id)
         for offset in range(blocks):
             period = local_period + offset
             if period < current_period:
-                frozen_periods.setdefault(idx, {})[period] = (
-                    1 if behavior.id in completed_ids else 0
-                )
+                frozen_periods.setdefault(idx, {})[period] = 1 if completed else 0
 
     for sb, behavior in all_items:
         idx = behavior_index[behavior.id]
@@ -336,6 +345,7 @@ async def _partial_inputs(
         current_period=current_period,
         frozen_periods=frozen_periods,
         previous_starts=previous_starts,
+        protected_ids=protected_ids,
     )
 
 
@@ -444,6 +454,9 @@ def _problem_payload(inputs: DayInputs) -> dict[str, Any]:
         "previousStarts": (
             dict(sorted((inputs.previous_starts or {}).items())) or None
         ),
+        "protectedSessions": sorted(
+            str(session_id) for session_id in inputs.protected_ids
+        ),
     }
 
 
@@ -495,6 +508,8 @@ async def _solve_day(inputs: DayInputs, low_priority: bool) -> OptimizationSolut
 
 
 def _solve_error(exc: Exception) -> WeekPlanningError:
+    if isinstance(exc, SolverBusyError):
+        return WeekPlanningError(code="solver_busy", message=exc.detail)
     if isinstance(exc, InfeasibleProblemError):
         return WeekPlanningError(code="infeasible", message=exc.detail)
     if isinstance(exc, UnboundedProblemError):
@@ -618,6 +633,93 @@ def _diff_sessions(
     return added, moved, dropped
 
 
+def _dump_diff_items(items: list[WeekSession] | list[WeekSessionMove]) -> list[dict]:
+    """Stable diff payload without generated session identities."""
+    return sorted(
+        (
+            {
+                key: value
+                for key, value in item.model_dump(mode="json").items()
+                if key != "plannedSessionId"
+            }
+            for item in items
+        ),
+        key=lambda item: json.dumps(item, sort_keys=True, default=str),
+    )
+
+
+def _diff_payload(
+    added: list[WeekSession],
+    moved: list[WeekSessionMove],
+    dropped: list[WeekSession],
+) -> dict[str, Any]:
+    return {
+        "added": _dump_diff_items(added),
+        "moved": _dump_diff_items(moved),
+        "dropped": _dump_diff_items(dropped),
+    }
+
+
+def _result_hash(
+    added: list[WeekSession],
+    moved: list[WeekSessionMove],
+    dropped: list[WeekSession],
+) -> str:
+    encoded = json.dumps(
+        _diff_payload(added, moved, dropped),
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _overlaps_protected(item: ScheduleItem, protected: list[CurrentSession]) -> bool:
+    start = item.time_period
+    end = start + item.scheduled_duration // MINUTES_PER_PERIOD
+    return any(
+        item.behavior_id == session.behavior_id
+        and start < session.time_period + session.duration // MINUTES_PER_PERIOD
+        and end > session.time_period
+        for session in protected
+    )
+
+
+def _merge_protected(
+    inputs: DayInputs,
+    items: list[ScheduleItem],
+    current: list[CurrentSession],
+) -> tuple[list[PlannedSession], list[CurrentSession]]:
+    """Keep completed, in-progress and released sessions exactly where they are."""
+    protected = [
+        session
+        for session in current
+        if session.planned_session_id in inputs.protected_ids
+    ]
+    if not protected:
+        return _attach_identities(items, current), current
+
+    generated = [item for item in items if not _overlaps_protected(item, protected)]
+    plannable_current = [
+        session
+        for session in current
+        if session.planned_session_id not in inputs.protected_ids
+    ]
+    planned = _attach_identities(generated, plannable_current)
+    planned.extend(
+        PlannedSession(
+            planned_session_id=session.planned_session_id,
+            behavior_id=session.behavior_id,
+            behavior_name=session.behavior_name,
+            time_period=session.time_period,
+            duration=session.duration,
+        )
+        for session in protected
+    )
+    planned.sort(key=lambda session: (session.time_period, str(session.planned_session_id)))
+    return planned, plannable_current
+
+
 def _unavailable_day(
     day: date, sessions: list[CurrentSession], error: WeekPlanningError, mode: str = "full"
 ) -> WeekDayResult:
@@ -637,8 +739,10 @@ async def _prepare_day(
     solution = await _solve_day(inputs, low_priority=low_priority)
     if solution.status == "protected_conflict":
         raise ProtectedConflict(solution)
-    planned = _attach_identities(solution.schedule_items, inputs.current_sessions)
-    added, moved, dropped = _diff_sessions(inputs.current_sessions, planned)
+    planned, plannable_current = _merge_protected(
+        inputs, solution.schedule_items, inputs.current_sessions
+    )
+    added, moved, dropped = _diff_sessions(plannable_current, planned)
     return PreparedDay(
         inputs=inputs,
         solution=solution,
@@ -646,6 +750,7 @@ async def _prepare_day(
         added=added,
         moved=moved,
         dropped=dropped,
+        result_hash=_result_hash(added, moved, dropped),
     )
 
 
@@ -663,8 +768,9 @@ class ProtectedConflict(Exception):
 async def preview_week(
     db: AsyncSession, user: User, week_start: date
 ) -> WeekPreviewResult:
-    """Solve every plannable day without writing anything."""
+    """Solve the accepted date range without writing anything."""
     snapshot = await build_week_snapshot(db, user, week_start)
+    range_start, range_end = _plan_range(snapshot.days, snapshot.plannable)
     results: list[WeekDayResult] = []
 
     for day in snapshot.days:
@@ -683,11 +789,16 @@ async def preview_week(
         try:
             prepared = await _prepare_day(snapshot.inputs[day], low_priority=True)
         except SolverBusyError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=exc.detail,
-                headers={"Retry-After": "2"},
-            ) from exc
+            logger.info("Week solve day %s solver busy: %s", day, exc.detail)
+            results.append(
+                _unavailable_day(
+                    day,
+                    sessions,
+                    _solve_error(exc),
+                    mode=snapshot.inputs[day].mode,
+                )
+            )
+            continue
         except ProtectedConflict as exc:
             results.append(
                 _unavailable_day(
@@ -726,14 +837,27 @@ async def preview_week(
                 declines=list(
                     (prepared.solution.diagnostics or {}).get("declines", [])
                 ),
+                resultHash=prepared.result_hash,
             )
         )
 
+    skipped_days = [
+        WeekDaySkip(
+            date=result.date,
+            code=result.error.code,
+            message=result.error.message,
+        )
+        for result in results
+        if result.error is not None
+    ]
     return WeekPreviewResult(
         weekStart=week_start,
+        rangeStart=range_start,
+        rangeEnd=range_end,
         generatedAt=clock.now_utc(),
         fingerprint=snapshot.fingerprint,
         days=results,
+        skippedDays=skipped_days,
     )
 
 
@@ -744,7 +868,9 @@ def _persist_day(db: AsyncSession, user: User, prepared: PreparedDay) -> None:
     run = OptimizationRun(
         id=solution.optimization_run_id,
         user_id=user.id,
-        status="completed" if solution.status == "optimal" else "feasible",
+        # The stored run status is the schedule-visible state. A future plan is
+        # still a draft because it has no committed baseline_revision.
+        status="completed",
         solver="candidate",
         start_date=inputs.day,
         end_date=inputs.day,
@@ -755,7 +881,7 @@ def _persist_day(db: AsyncSession, user: User, prepared: PreparedDay) -> None:
         diagnostics={
             **(solution.diagnostics or {}),
             "objective_weights": record_weights(inputs.raw_weights),
-            "week_planning": {"mode": inputs.mode},
+            "week_planning": {"mode": inputs.mode, "solverStatus": solution.status},
         },
         plan_revision=inputs.revision,
     )
@@ -795,76 +921,146 @@ async def _retire_dropped(
             old.retired_revision = revision
 
 
+def _skip_for_day(
+    day: date,
+    snapshot: WeekSnapshot,
+    requested: set[date],
+    applied: set[date],
+    failed: dict[date, WeekDaySkip],
+) -> WeekDaySkip:
+    if day in failed:
+        return failed[day]
+    if day not in snapshot.plannable:
+        return WeekDaySkip(
+            date=day, code="past_day", message="Past days are read-only."
+        )
+    if day not in requested:
+        return WeekDaySkip(
+            date=day,
+            code="not_selected",
+            message="Not included in the accepted preview.",
+        )
+    return WeekDaySkip(
+        date=day,
+        code="unavailable",
+        message="This day could not be planned from the saved data.",
+    )
+
+
 async def apply_week(
     db: AsyncSession, user: User, request: WeekApplyRequest
 ) -> WeekApplyResult:
-    """Revalidate, re-solve and persist all plannable days atomically."""
+    """Re-solve accepted dates, compare diffs, then write only the solved days."""
     snapshot = await build_week_snapshot(db, user, request.weekStart)
+    range_start, range_end = _plan_range(snapshot.days, snapshot.plannable)
+
+    requested = set(request.dates)
+    invalid = sorted(day.isoformat() for day in requested - set(snapshot.plannable))
+    if invalid:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "week_apply_dates",
+                "message": "Apply dates must be plannable dates from the previewed week.",
+                "invalidDates": invalid,
+            },
+        )
+    accepted = [day for day in snapshot.plannable if day in requested]
+
+    prepared_by_date: dict[date, PreparedDay] = {}
+    failed: dict[date, WeekDaySkip] = {}
+    for day in accepted:
+        try:
+            prepared_by_date[day] = await _prepare_day(
+                snapshot.inputs[day], low_priority=True
+            )
+        except SolverBusyError as exc:
+            failed[day] = WeekDaySkip(
+                date=day, **_solve_error(exc).model_dump()
+            )
+        except ProtectedConflict as exc:
+            failed[day] = WeekDaySkip(
+                date=day, **_protected_conflict_error(exc.solution).model_dump()
+            )
+        except Exception as exc:
+            logger.info("Week apply day %s unavailable: %s", day, exc)
+            failed[day] = WeekDaySkip(date=day, **_solve_error(exc).model_dump())
+
+    applied = set(prepared_by_date)
+    skipped_days = [
+        _skip_for_day(day, snapshot, requested, applied, failed)
+        for day in snapshot.days
+        if day not in applied
+    ]
+    skipped_payload = [skip.model_dump(mode="json") for skip in skipped_days]
+
+    changed = []
+    for day, prepared in prepared_by_date.items():
+        expected = request.expectedResults.get(day.isoformat())
+        if expected != prepared.result_hash:
+            changed.append(
+                {
+                    "date": day.isoformat(),
+                    "expectedResultHash": expected,
+                    "actualResultHash": prepared.result_hash,
+                    "diff": _diff_payload(prepared.added, prepared.moved, prepared.dropped),
+                }
+            )
+    if changed:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "week_plan_changed",
+                "message": "The preview no longer matches the current plan; nothing was written.",
+                "days": changed,
+                "skippedDays": skipped_payload,
+            },
+        )
+
     if request.fingerprint != snapshot.fingerprint:
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "week_plan_stale",
                 "message": "The plan changed since the preview. Preview again before applying.",
+                "skippedDays": skipped_payload,
             },
         )
 
-    prepared_days: list[PreparedDay] = []
-    unavailable: list[dict[str, Any]] = []
-    for day in snapshot.plannable:
-        try:
-            prepared_days.append(
-                await _prepare_day(snapshot.inputs[day], low_priority=True)
-            )
-        except SolverBusyError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=exc.detail,
-                headers={"Retry-After": "2"},
-            ) from exc
-        except ProtectedConflict as exc:
-            unavailable.append(
-                {
-                    "date": day.isoformat(),
-                    **_protected_conflict_error(exc.solution).model_dump(),
-                }
-            )
-        except Exception as exc:
-            logger.info("Week apply day %s unavailable: %s", day, exc)
-            unavailable.append(
-                {"date": day.isoformat(), **_solve_error(exc).model_dump()}
-            )
-
-    if unavailable:
+    if not prepared_by_date:
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "week_plan_unavailable",
-                "message": "At least one day could not be planned; nothing was written.",
-                "days": unavailable,
+                "message": "No day from the preview can be applied; nothing was written.",
+                "skippedDays": skipped_payload,
             },
         )
 
     try:
-        applied: list[WeekDayApplyResult] = []
-        for prepared in prepared_days:
+        applied_results: list[WeekDayApplyResult] = []
+        for day in snapshot.plannable:
+            prepared = prepared_by_date.get(day)
+            if prepared is None:
+                continue
             _persist_day(db, user, prepared)
             await _retire_dropped(db, prepared, prepared.inputs.revision)
-            applied.append(
+            applied_results.append(
                 WeekDayApplyResult(
-                    date=prepared.inputs.day,
+                    date=day,
                     runId=prepared.solution.optimization_run_id,
                     planRevision=prepared.inputs.revision,
                     mode=prepared.inputs.mode,
                     added=len(prepared.added),
                     moved=len(prepared.moved),
                     dropped=len(prepared.dropped),
+                    resultHash=prepared.result_hash,
                 )
             )
         await db.commit()
     except Exception:
         await db.rollback()
-        logger.exception("Week apply failed; all day writes rolled back")
+        logger.exception("Week apply failed; all accepted day writes rolled back")
         raise HTTPException(
             status_code=500,
             detail={
@@ -875,7 +1071,10 @@ async def apply_week(
 
     return WeekApplyResult(
         weekStart=request.weekStart,
+        rangeStart=range_start,
+        rangeEnd=range_end,
         fingerprint=request.fingerprint,
-        appliedDays=len(applied),
-        days=applied,
+        appliedDays=len(applied_results),
+        days=applied_results,
+        skippedDays=skipped_days,
     )

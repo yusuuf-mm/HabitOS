@@ -37,13 +37,13 @@ async def get_daily_schedule(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Get daily schedule."""
+    today = local_today(user_zone(current_user))
     target_date = (
-        datetime.strptime(date_str, "%Y-%m-%d").date()
-        if date_str
-        else local_today(user_zone(current_user))
+        datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else today
     )
 
-    # 1. Find active run covering the date
+    # 1. Find the schedule-visible run covering the date. Week plans write a
+    # visible run even when the solver only reached a feasible solution.
     result = await db.execute(
         select(OptimizationRun).where(
             (OptimizationRun.user_id == current_user.id) &
@@ -54,8 +54,18 @@ async def get_daily_schedule(
     )
     run = result.scalars().first()
 
+    committed = (
+        run is not None
+        and run.baseline_revision is not None
+        and run.plan_revision == run.baseline_revision
+    )
+    plan_source = (
+        "draft" if target_date > today else "committed" if committed else "fallback"
+    )
+
     if not run:
         # Return empty schedule structure if no optimization found
+        plan_source = "none"
         return ApiResponse(
             data=DailySchedule(
                 id=uuid4(), # ephemeral
@@ -66,6 +76,7 @@ async def get_daily_schedule(
                 objective_scores=[],
                 created_at=clock.now_utc(),
                 declines=[],
+                planSource=plan_source,
             ),
             message="No schedule found for this date"
         )
@@ -154,6 +165,7 @@ async def get_daily_schedule(
             objective_scores=contributions,
             created_at=run.created_at,
             declines=list((run.diagnostics or {}).get("declines", [])),
+            planSource=plan_source,
         ),
         message="Schedule retrieved successfully"
     )

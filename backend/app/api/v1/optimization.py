@@ -513,10 +513,10 @@ async def preview_week(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
-    """Preview seven real day plans without writing anything.
+    """Preview the displayed week without writing anything.
 
-    Past dates stay in the response as unavailable rows so the UI never shows a
-    blank week or pretends a failed solve produced zero changes.
+    Past and failed dates stay in the response as unavailable rows with a
+    reason, so the UI never pretends a failed solve produced zero changes.
     """
     try:
         result = await week_planning.preview_week(db, current_user, request.weekStart)
@@ -537,7 +537,7 @@ async def apply_week(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
-    """Apply a previously previewed week after revalidating its fingerprint."""
+    """Apply only the accepted dates after re-solving and comparing their diffs."""
     try:
         result = await week_planning.apply_week(db, current_user, request)
         return ApiResponse(
