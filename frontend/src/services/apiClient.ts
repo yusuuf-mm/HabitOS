@@ -20,6 +20,8 @@ import type {
   DashboardSummary,
   AnalyticsData,
   ApiResponse,
+  WeekApplyResult,
+  WeekPreviewResult,
 } from "@/types";
 import type {
   HelperStatus,
@@ -123,6 +125,27 @@ export const optimizationApi = {
     targetDate?: string,
   ): Promise<ApiResponse<ForcedIncludeResult>> {
     return apiPost("/optimization/forced-include", { behaviorIds, targetDate });
+  },
+
+  // Seven day-solves can outlast the default 30s client timeout. Only these
+  // week endpoints get the longer budget; every other call stays unchanged.
+  async previewWeek(weekStart: string): Promise<ApiResponse<WeekPreviewResult>> {
+    return apiPost(
+      "/optimization/week/preview",
+      { weekStart },
+      { timeout: 90_000 },
+    );
+  },
+
+  async applyWeek(
+    weekStart: string,
+    fingerprint: string,
+  ): Promise<ApiResponse<WeekApplyResult>> {
+    return apiPost(
+      "/optimization/week/apply",
+      { weekStart, fingerprint },
+      { timeout: 90_000 },
+    );
   },
 };
 
