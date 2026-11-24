@@ -188,10 +188,27 @@ is likewise excluded from the denominator. If a deadline ever gains a
 preparation block that the planner places, that prep session counts normally —
 but Step 1 stores no prep sessions, so deadlines stay fully out of the metric.
 
+## 11. Week planning (preview/apply)
+
+`POST /optimization/week/preview` never writes. It solves each plannable date
+with the same problem builder, saved objective weights and commitment blocks as
+a normal day solve, then returns real per-date `added` / `moved` / `dropped`
+sessions against the plan currently shown. A date that cannot be planned is
+reported as `available: false` with a reason; it is never rendered as zero
+changes. Past dates are read-only and appear as unavailable rows.
+
+`POST /optimization/week/apply` rechecks the preview's input fingerprint,
+re-runs the same solves and writes every date in one transaction; any failure
+rolls the whole week back. A frozen today is a partial re-plan at the next
+revision and carries its session identities; future dates are ordinary new day
+plans. Nothing here commits a future baseline or changes the denominator:
+future drafts still have no `C` until their own baseline freezes (§2).
+
 ## Changelog
 
 | version | change |
 |---|---|
+| v1 (week planning) | Explicit seven-day preview/apply: write-nothing preview, fingerprinted all-or-nothing apply, frozen-today partial re-plan, and unavailable states instead of empty data. |
 | v1 | Session-level denominator frozen at the baseline moment; released sessions leave and are reported; system-dropped sessions stay and are reported separately; re-planning never shrinks the denominator. |
 | v1 (amended) | Baseline open until first session start or 05:00 local, whichever is later; drafts are not re-plans. Deactivating a behaviour before a session starts counts as released. Late completions (before local day end) count and are flagged. Timezone stored per user and used for boundaries. Multi-day rates are summed, not averaged. Known-tension section and `completion_rate_vs_feasible` added. |
 | v1 (items) | Commitments are context, not sessions: excluded from the completion-rate denominator, reported separately; deadlines likewise unless a prep block becomes a session. |

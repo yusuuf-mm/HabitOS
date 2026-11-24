@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 from .behavior import BehaviorResponse
 
 
@@ -105,7 +105,7 @@ class OptimizationHistoryResponse(BaseModel):
     data: List[OptimizationRunResponse]
 
 
-from .schedule import DailySchedule
+from .schedule import DailySchedule  # noqa: E402  (forward ref declared above)
 OptimizationResult.update_forward_refs()
 
 
@@ -157,3 +157,97 @@ class InfeasibilityDiagnostics(BaseModel):
 
     class Config:
         populate_by_name = True
+
+
+class WeekPreviewRequest(BaseModel):
+    """Dates are always derived from a Monday, never sent as a loose range."""
+
+    weekStart: date
+
+
+class WeekApplyRequest(BaseModel):
+    """A preview must be accepted explicitly before anything is written."""
+
+    weekStart: date
+    fingerprint: str = Field(..., min_length=1)
+
+
+class WeekSessionSlot(BaseModel):
+    """The observable slot a planned session occupies."""
+
+    startTime: str
+    endTime: str
+    duration: int
+
+
+class WeekSession(WeekSessionSlot):
+    """A session that a week plan would add or drop."""
+
+    plannedSessionId: UUID
+    behaviorId: UUID
+    behaviorName: str
+
+
+class WeekSessionMove(WeekSessionSlot):
+    """A carried session whose slot changes, with its before/after times."""
+
+    plannedSessionId: UUID
+    behaviorId: UUID
+    behaviorName: str
+    before: WeekSessionSlot
+    after: WeekSessionSlot
+
+
+class WeekPlanningError(BaseModel):
+    """Why one day could not be planned. Never report it as zero changes."""
+
+    code: str
+    message: str
+
+
+class WeekDayResult(BaseModel):
+    """The real baseline-vs-candidate diff for one date."""
+
+    date: date
+    mode: str  # full | partial
+    available: bool
+    solverStatus: Optional[str] = None
+    error: Optional[WeekPlanningError] = None
+    sessionsBefore: int
+    sessionsAfter: Optional[int] = None
+    minutesBefore: int
+    minutesAfter: Optional[int] = None
+    added: List[WeekSession] = Field(default_factory=list)
+    moved: List[WeekSessionMove] = Field(default_factory=list)
+    dropped: List[WeekSession] = Field(default_factory=list)
+    declines: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class WeekPreviewResult(BaseModel):
+    """Write-nothing preview. Apply re-checks the fingerprint and re-solves."""
+
+    weekStart: date
+    generatedAt: datetime
+    fingerprint: str
+    days: List[WeekDayResult]
+
+
+class WeekDayApplyResult(BaseModel):
+    """What was persisted for one date."""
+
+    date: date
+    runId: UUID
+    planRevision: int
+    mode: str
+    added: int
+    moved: int
+    dropped: int
+
+
+class WeekApplyResult(BaseModel):
+    """All-or-nothing result: every day is written or none is."""
+
+    weekStart: date
+    fingerprint: str
+    appliedDays: int
+    days: List[WeekDayApplyResult]

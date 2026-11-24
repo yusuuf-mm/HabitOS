@@ -1,8 +1,6 @@
 """Optimization routes."""
 import logging
-from datetime import datetime, timezone, date as date_class
 from uuid import uuid4, UUID
-from typing import List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,13 +9,12 @@ from sqlalchemy import select, func
 from app.api.deps import get_db, get_current_active_user
 from app.core import settings
 from app.core.constants import period_to_time, PERIODS_PER_DAY
-from app.services.items import blocked_periods_for_day
+from app.services import week_planning
+from app.services.day_problem import load_day_problem
 from app.services.metrics import local_today, resolve_day_plan, user_zone
 from app.models import (
     User,
     Behavior,
-    Objective,
-    Constraint,
     OptimizationRun,
     ScheduledBehavior,
 )
@@ -30,10 +27,6 @@ from app.core.exceptions import (
 )
 from app.optimization import (
     CandidateSolver,
-    OptimizationProblem,
-    BehaviorScheduleInput,
-    ConstraintInput,
-    normalise_weights,
     record_weights,
     run_in_solver_pool,
 )
@@ -49,6 +42,10 @@ from app.schemas.optimization import (
     OptimizationHistoryResponse,
     ScheduledBehaviorResponse,
     ObjectiveContributionSchema,
+    WeekApplyRequest,
+    WeekApplyResult,
+    WeekPreviewRequest,
+    WeekPreviewResult,
 )
 from app.api.v1.behaviors import map_behavior_to_response, get_objective_map
 
@@ -81,89 +78,9 @@ def _raise_on_protected_conflict(solution) -> None:
     )
 
 
-async def _load_problem(
-    db: AsyncSession, user: User, target_date: date_class
-):
-    """Build the day's optimization problem from the user's stored data.
-
-    Weights are normalised here, once: the solver only ever sees a distribution
-    summing to 1, and the raw values are returned so the plan can record both.
-    """
-    behaviors_result = await db.execute(
-        select(Behavior).where(
-            (Behavior.user_id == user.id) & (Behavior.is_active == True)
-        )
-    )
-    behaviors_db = behaviors_result.scalars().all()
-    if not behaviors_db:
-        raise HTTPException(
-            status_code=422,
-            detail="No active behaviors found. Please create behaviors first.",
-        )
-
-    objectives_result = await db.execute(
-        select(Objective).where(Objective.user_id == user.id)
-    )
-    objectives_db = objectives_result.scalars().all()
-    if not objectives_db:
-        raise HTTPException(
-            status_code=422,
-            detail="No objectives found. Please set objectives first.",
-        )
-
-    constraints_result = await db.execute(
-        select(Constraint).where(
-            (Constraint.user_id == user.id) & (Constraint.is_active == True)
-        )
-    )
-    constraints_db = constraints_result.scalars().all()
-
-    behaviors = [
-        BehaviorScheduleInput(
-            id=b.id,
-            name=b.name,
-            min_duration=b.min_duration,
-            typical_duration=b.typical_duration,
-            max_duration=b.max_duration,
-            energy_cost=b.energy_cost,
-            impacts=b.get_all_impacts(),
-            preferred_time_slots=[
-                s.value if hasattr(s, "value") else s for s in b.preferred_time_slots
-            ],
-            protected=bool(getattr(b, "is_protected", False)),
-        )
-        for b in behaviors_db
-    ]
-
-    raw_weights = {
-        obj.type.value if hasattr(obj.type, "value") else str(obj.type): obj.weight
-        for obj in objectives_db
-    }
-
-    constraints = [
-        ConstraintInput(
-            type=c.type.value if hasattr(c.type, "value") else str(c.type),
-            parameters=c.parameters,
-            is_active=c.is_active,
-        )
-        for c in constraints_db
-    ]
-
-    problem = OptimizationProblem(
-        user_id=user.id,
-        behaviors=behaviors,
-        objectives=normalise_weights(raw_weights),
-        constraints=constraints,
-        start_date=target_date,
-        end_date=target_date,
-        time_periods=PERIODS_PER_DAY,
-    )
-    # Commitments occupy fixed time on this date (docs/ITEMS.md): the solver
-    # plans around them, so every solve built here respects them.
-    problem.blocked_periods = frozenset(
-        await blocked_periods_for_day(db, user, target_date)
-    )
-    return problem, raw_weights
+# Older routes import this private alias. Week planning uses the shared service
+# directly; keeping the name avoids a noisy refactor outside this change.
+_load_problem = load_day_problem
 
 
 async def map_run_to_response(db: AsyncSession, run: OptimizationRun, user: User, include_schedule: bool = True) -> OptimizationRunResponse:
@@ -588,3 +505,47 @@ async def forced_include(
     except Exception:
         logger.exception("Forced-include error")
         raise HTTPException(status_code=500, detail="Forced-include solve failed")
+
+
+@router.post("/week/preview", response_model=ApiResponse[WeekPreviewResult])
+async def preview_week(
+    request: WeekPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Preview seven real day plans without writing anything.
+
+    Past dates stay in the response as unavailable rows so the UI never shows a
+    blank week or pretends a failed solve produced zero changes.
+    """
+    try:
+        result = await week_planning.preview_week(db, current_user, request.weekStart)
+        return ApiResponse(
+            data=result,
+            message="Week preview generated; nothing was saved.",
+        ).dict(exclude_none=True)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Week preview failed")
+        raise HTTPException(status_code=500, detail="Week preview failed")
+
+
+@router.post("/week/apply", response_model=ApiResponse[WeekApplyResult])
+async def apply_week(
+    request: WeekApplyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> dict:
+    """Apply a previously previewed week after revalidating its fingerprint."""
+    try:
+        result = await week_planning.apply_week(db, current_user, request)
+        return ApiResponse(
+            data=result,
+            message="Week plan applied.",
+        ).dict(exclude_none=True)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Week apply failed")
+        raise HTTPException(status_code=500, detail="Week apply failed")
