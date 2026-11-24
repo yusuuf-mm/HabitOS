@@ -56,6 +56,9 @@ export interface WeekDayData {
   deadlines: RangeEntry[];
   // The schedule request for this day failed; any sessions shown are stale.
   unavailable?: boolean;
+  // draft = future week plan, committed = today's accepted baseline,
+  // fallback = today re-planned around completed/released sessions.
+  planSource?: "draft" | "committed" | "fallback" | "none";
 }
 
 export type DayData = WeekDayData;

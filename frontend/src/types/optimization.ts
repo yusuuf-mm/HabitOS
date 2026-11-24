@@ -76,6 +76,9 @@ export interface DailySchedule {
   createdAt: string;
   // Present on the schedule endpoint; why the planner left habits out.
   declines?: Array<{ behaviorId: string; behaviorName: string; reason: string }>;
+  // draft | committed | fallback | none. Future week plans are drafts; today's
+  // accepted baseline is committed and a partly re-planned today is fallback.
+  planSource?: "draft" | "committed" | "fallback" | "none";
 }
 
 export interface WeekSessionSlot {
@@ -103,6 +106,10 @@ export interface WeekPlanningError {
   message: string;
 }
 
+export interface WeekDaySkip extends WeekPlanningError {
+  date: string;
+}
+
 export interface WeekDayResult {
   date: string;
   mode: "full" | "partial";
@@ -117,13 +124,25 @@ export interface WeekDayResult {
   moved: WeekSessionMove[];
   dropped: WeekSession[];
   declines: Array<{ behaviorId: string; behaviorName: string; reason: string }>;
+  // Hash of the diff without generated session IDs, used to detect stale previews.
+  resultHash: string;
 }
 
 export interface WeekPreviewResult {
   weekStart: string;
+  rangeStart: string;
+  rangeEnd: string;
   generatedAt: string;
   fingerprint: string;
   days: WeekDayResult[];
+  skippedDays: WeekDaySkip[];
+}
+
+export interface WeekApplyRequest {
+  weekStart: string;
+  fingerprint: string;
+  dates: string[];
+  expectedResults: Record<string, string>;
 }
 
 export interface WeekDayApplyResult {
@@ -134,11 +153,15 @@ export interface WeekDayApplyResult {
   added: number;
   moved: number;
   dropped: number;
+  resultHash: string;
 }
 
 export interface WeekApplyResult {
   weekStart: string;
+  rangeStart: string;
+  rangeEnd: string;
   fingerprint: string;
   appliedDays: number;
   days: WeekDayApplyResult[];
+  skippedDays: WeekDaySkip[];
 }

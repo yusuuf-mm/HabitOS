@@ -11,6 +11,7 @@ import { InsightTiles } from "@/components/InsightTiles";
 import { LifeMap } from "@/components/LifeMap";
 import type { RangeEntry, SessionBlock, WeekDayData } from "@/types/dashboard";
 import type { DashboardSummary } from "@/types";
+import { addDays, localISODate, mondayOf } from "@/lib/localDate";
 
 const {
     helperGetStatus,
@@ -168,14 +169,18 @@ function weekPreviewResponse() {
             moved: [],
             dropped: [],
             declines: [],
+            resultHash: `hash-${date}`,
         };
     });
     return {
         data: {
             weekStart: "2026-06-08",
+            rangeStart: "2026-06-08",
+            rangeEnd: "2026-06-14",
             generatedAt: "2026-06-08T12:00:00Z",
             fingerprint: "fp-1",
             days,
+            skippedDays: [],
         },
         success: true,
     };
@@ -197,6 +202,25 @@ describe("Dashboard Page", () => {
         );
 
         expect(screen.getByText(/loading dashboard/i)).toBeInTheDocument();
+    });
+
+    it("disables Plan my week when the displayed week is entirely past", async () => {
+        analyticsSummary.mockResolvedValue(mockSummaryData);
+
+        render(
+            <BrowserRouter>
+                <Dashboard />
+            </BrowserRouter>,
+        );
+
+        expect(await screen.findByText("Kept my plan")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /plan my week/i })).toBeEnabled();
+
+        fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
+
+        const planButton = screen.getByRole("button", { name: /plan my week/i });
+        expect(planButton).toBeDisabled();
+        expect(planButton).toHaveAttribute("title", "This week is entirely in the past.");
     });
 
     it("renders stats after data loads", async () => {
@@ -363,6 +387,35 @@ describe("WeekCalendar", () => {
                 name: "Monday, Jun 8, deadline Quarterly report",
             }),
         ).toBeInTheDocument();
+    });
+
+    it("labels future draft days differently from today's committed plan", () => {
+        const today = localISODate(new Date());
+        const nextMonday = localISODate(addDays(mondayOf(new Date()), 7));
+        const draftDate = localISODate(addDays(new Date(`${nextMonday}T12:00:00`), 1));
+        const days: WeekDayData[] = [
+            { ...emptyDay(today), planSource: "committed" },
+            { ...emptyDay(draftDate), planSource: "draft" },
+        ];
+
+        render(
+            <WeekCalendar
+                weekStart={mondayOf(new Date())}
+                days={days}
+                selectedDate={today}
+                onSelectDate={vi.fn()}
+                onOpenBlock={vi.fn()}
+            />,
+        );
+
+        expect(
+            screen.getByRole("button", { name: /committed plan/i }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: /draft plan/i }),
+        ).toBeInTheDocument();
+        expect(screen.getAllByText("draft plan").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("committed plan").length).toBeGreaterThan(0);
     });
 
     it("moves focus to the next day's block with ArrowRight", () => {
@@ -886,13 +939,17 @@ describe("Dashboard data sources", () => {
     it("previews the week from the dashboard and applies only on explicit click", async () => {
         analyticsSummary.mockResolvedValue(mockSummaryData);
         analyticsSeries.mockResolvedValue([]);
-        previewWeek.mockResolvedValue(weekPreviewResponse());
+        const preview = weekPreviewResponse();
+        previewWeek.mockResolvedValue(preview);
         applyWeek.mockResolvedValue({
             data: {
                 weekStart: "2026-06-08",
+                rangeStart: "2026-06-08",
+                rangeEnd: "2026-06-14",
                 fingerprint: "fp-1",
                 appliedDays: 7,
                 days: [],
+                skippedDays: [],
             },
             success: true,
         });
@@ -914,8 +971,16 @@ describe("Dashboard data sources", () => {
         expect(applyWeek).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByRole("button", { name: /apply 7 days/i }));
+        const solvedDates = preview.data.days.map((entry) => entry.date);
         await waitFor(() =>
-            expect(applyWeek).toHaveBeenCalledWith(expect.any(String), "fp-1"),
+            expect(applyWeek).toHaveBeenCalledWith({
+                weekStart: preview.data.weekStart,
+                fingerprint: "fp-1",
+                dates: solvedDates,
+                expectedResults: Object.fromEntries(
+                    solvedDates.map((date) => [date, `hash-${date}`]),
+                ),
+            }),
         );
     });
 });
