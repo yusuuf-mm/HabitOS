@@ -26,6 +26,8 @@ const {
     releaseSession,
     scheduleGetSchedule,
     optimizationHistory,
+    previewWeek,
+    applyWeek,
     analyticsSummary,
     analyticsStats,
     analyticsSeries,
@@ -44,6 +46,8 @@ const {
     releaseSession: vi.fn(),
     scheduleGetSchedule: vi.fn(),
     optimizationHistory: vi.fn(),
+    previewWeek: vi.fn(),
+    applyWeek: vi.fn(),
     analyticsSummary: vi.fn(),
     analyticsStats: vi.fn(),
     analyticsSeries: vi.fn(),
@@ -79,6 +83,8 @@ vi.mock("@/services/apiClient", () => ({
         },
         optimization: {
             getOptimizationHistory: optimizationHistory,
+            previewWeek,
+            applyWeek,
         },
     },
     helperApi: {
@@ -101,6 +107,8 @@ vi.mock("@/services/apiClient", () => ({
     },
     optimizationApi: {
         getOptimizationHistory: optimizationHistory,
+        previewWeek,
+        applyWeek,
     },
     analyticsApi: {
         getDashboardSummary: analyticsSummary,
@@ -134,6 +142,44 @@ const mockSummaryData = {
     },
     success: true,
 };
+
+function weekPreviewResponse() {
+    const days = Array.from({ length: 7 }, (_, index) => {
+        const date = `2026-06-${String(8 + index).padStart(2, "0")}`;
+        return {
+            date,
+            mode: "full" as const,
+            available: true,
+            solverStatus: "optimal",
+            sessionsBefore: 0,
+            sessionsAfter: index === 0 ? 1 : 0,
+            minutesBefore: 0,
+            minutesAfter: index === 0 ? 30 : 0,
+            added: index === 0
+                ? [{
+                    plannedSessionId: "s-new",
+                    behaviorId: "b-1",
+                    behaviorName: "Morning Walk",
+                    startTime: "09:00",
+                    endTime: "09:30",
+                    duration: 30,
+                }]
+                : [],
+            moved: [],
+            dropped: [],
+            declines: [],
+        };
+    });
+    return {
+        data: {
+            weekStart: "2026-06-08",
+            generatedAt: "2026-06-08T12:00:00Z",
+            fingerprint: "fp-1",
+            days,
+        },
+        success: true,
+    };
+}
 
 describe("Dashboard Page", () => {
     beforeEach(() => {
@@ -835,5 +881,41 @@ describe("Dashboard data sources", () => {
 
         expect(await screen.findByText("Health: 60%")).toBeInTheDocument();
         expect(optimizationHistory).not.toHaveBeenCalled();
+    });
+
+    it("previews the week from the dashboard and applies only on explicit click", async () => {
+        analyticsSummary.mockResolvedValue(mockSummaryData);
+        analyticsSeries.mockResolvedValue([]);
+        previewWeek.mockResolvedValue(weekPreviewResponse());
+        applyWeek.mockResolvedValue({
+            data: {
+                weekStart: "2026-06-08",
+                fingerprint: "fp-1",
+                appliedDays: 7,
+                days: [],
+            },
+            success: true,
+        });
+
+        render(
+            <BrowserRouter>
+                <Dashboard />
+            </BrowserRouter>,
+        );
+
+        expect(await screen.findByText("Kept my plan")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /plan my week/i }));
+
+        expect(
+            await screen.findByRole("dialog", { name: /plan my week/i }),
+        ).toBeInTheDocument();
+        expect(await screen.findByText("7 of 7 days can be planned.")).toBeInTheDocument();
+        expect(previewWeek).toHaveBeenCalledWith(expect.any(String));
+        expect(applyWeek).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: /apply 7 days/i }));
+        await waitFor(() =>
+            expect(applyWeek).toHaveBeenCalledWith(expect.any(String), "fp-1"),
+        );
     });
 });

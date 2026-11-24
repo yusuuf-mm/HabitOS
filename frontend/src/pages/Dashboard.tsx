@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/Loader";
 import { PlanHealthRail } from "@/components/PlanHealthRail";
 import { WeekCalendar } from "@/components/WeekCalendar";
 import { DayDetailPanel } from "@/components/DayDetailPanel";
+import { WeekPlanDialog } from "@/components/WeekPlanDialog";
 import { InsightTiles } from "@/components/InsightTiles";
 import { LifeMap } from "@/components/LifeMap";
 import { HelperOrb } from "@/components/HelperOrb";
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [series, setSeries] = useState<SeriesDay[]>([]);
   const [rangeDays, setRangeDays] = useState(7);
   const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(new Date()));
+  const [weekPlanOpen, setWeekPlanOpen] = useState(false);
   const [days, setDays] = useState<WeekDayData[]>([]);
   const [selectedDate, setSelectedDate] = useState(iso(new Date()));
   const [selectedBlock, setSelectedBlock] = useState<SelectedBlock | null>(null);
@@ -349,6 +351,14 @@ export default function Dashboard() {
             >
               Today
             </Button>
+            <Button
+              size="sm"
+              className="ml-auto"
+              onClick={() => setWeekPlanOpen(true)}
+            >
+              <CalendarRange className="h-4 w-4" aria-hidden="true" />
+              Plan my week
+            </Button>
           </div>
 
           <WeekCalendar
@@ -465,6 +475,13 @@ export default function Dashboard() {
           onOpenBlock={setSelectedBlock}
         />
       )}
+
+      <WeekPlanDialog
+        open={weekPlanOpen}
+        onOpenChange={setWeekPlanOpen}
+        weekStart={iso(weekStart)}
+        onApplied={() => void fetchAll()}
+      />
 
       <HelperOrb onChanged={() => void fetchAll()} />
     </div>

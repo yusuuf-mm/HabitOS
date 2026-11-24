@@ -77,3 +77,68 @@ export interface DailySchedule {
   // Present on the schedule endpoint; why the planner left habits out.
   declines?: Array<{ behaviorId: string; behaviorName: string; reason: string }>;
 }
+
+export interface WeekSessionSlot {
+  startTime: string;
+  endTime: string;
+  duration: number;
+}
+
+export interface WeekSession extends WeekSessionSlot {
+  plannedSessionId: string;
+  behaviorId: string;
+  behaviorName: string;
+}
+
+export interface WeekSessionMove extends WeekSessionSlot {
+  plannedSessionId: string;
+  behaviorId: string;
+  behaviorName: string;
+  before: WeekSessionSlot;
+  after: WeekSessionSlot;
+}
+
+export interface WeekPlanningError {
+  code: string;
+  message: string;
+}
+
+export interface WeekDayResult {
+  date: string;
+  mode: "full" | "partial";
+  available: boolean;
+  solverStatus?: string | null;
+  error?: WeekPlanningError | null;
+  sessionsBefore: number;
+  sessionsAfter?: number | null;
+  minutesBefore: number;
+  minutesAfter?: number | null;
+  added: WeekSession[];
+  moved: WeekSessionMove[];
+  dropped: WeekSession[];
+  declines: Array<{ behaviorId: string; behaviorName: string; reason: string }>;
+}
+
+export interface WeekPreviewResult {
+  weekStart: string;
+  generatedAt: string;
+  fingerprint: string;
+  days: WeekDayResult[];
+}
+
+export interface WeekDayApplyResult {
+  date: string;
+  runId: string;
+  planRevision: number;
+  mode: "full" | "partial";
+  added: number;
+  moved: number;
+  dropped: number;
+}
+
+export interface WeekApplyResult {
+  weekStart: string;
+  fingerprint: string;
+  appliedDays: number;
+  days: WeekDayApplyResult[];
+}
