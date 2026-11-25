@@ -21,9 +21,11 @@ export function HelperOrb({ onChanged }: { onChanged?: () => void }) {
     { text: string; nonce: number } | undefined
   >(undefined);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcriptNonce = useRef(0);
 
   const handleFinalTranscript = useCallback((text: string) => {
-    setVoiceTranscript({ text, nonce: Date.now() });
+    transcriptNonce.current += 1;
+    setVoiceTranscript({ text, nonce: transcriptNonce.current });
   }, []);
   const voice = useSpeechRecognition({ onFinalTranscript: handleFinalTranscript });
 
