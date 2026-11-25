@@ -1,16 +1,44 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  VOICE_UNSUPPORTED_MESSAGE,
+  type VoiceStatus,
+} from "@/hooks/useSpeechRecognition";
 import { apiClient } from "@/services/apiClient";
 import type { HelperDraftItem, HelperDraftResponse, HelperStatus } from "@/types/helper";
 
-export type HelperOrbState = "idle" | "thinking" | "needsYou" | "done" | "error";
+export type HelperOrbState =
+  | "idle"
+  | "thinking"
+  | "needsYou"
+  | "done"
+  | "error"
+  | "listening"
+  | "processing";
+
+export interface HelperVoiceProps {
+  supported: boolean;
+  status: VoiceStatus;
+  onStart: () => void;
+  onStop: () => void;
+  onReset: () => void;
+}
 
 interface HelperPanelProps {
   date: string;
   onConfirmed?: () => void;
   onStateChange?: (s: HelperOrbState) => void;
-  submitRequest?: { text: string; nonce: number };
+  voiceTranscript?: { text: string; nonce: number };
+  voice?: HelperVoiceProps;
 }
+
+const DEFAULT_VOICE: HelperVoiceProps = {
+  supported: false,
+  status: { state: "idle" },
+  onStart: () => {},
+  onStop: () => {},
+  onReset: () => {},
+};
 
 type Phase = "idle" | "thinking" | "clarify" | "review" | "confirming" | "done";
 
@@ -68,6 +96,12 @@ export function mapHelperError(error: unknown): string {
     return "I couldn't turn that into a plan. Try saying it a different way.";
   }
   return "Something went wrong. Try again.";
+}
+
+function voiceStatusMessage(status: VoiceStatus): string | null {
+  if (status.state === "listening") return "Listening…";
+  if (status.state === "processing") return "Processing final transcript…";
+  return null;
 }
 
 function recurrenceText(item: HelperDraftItem): string {
@@ -146,7 +180,14 @@ function describeAddedItems(items: HelperDraftItem[]): string {
   return `Added ${parts.join(" and ")}${names.length <= 2 && names.length > 0 ? `: ${names.join(", ")}` : ""}.`;
 }
 
-export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }: HelperPanelProps) {
+export function HelperPanel({
+  date,
+  onConfirmed,
+  onStateChange,
+  voiceTranscript,
+  voice,
+}: HelperPanelProps) {
+  const voiceProps = voice ?? DEFAULT_VOICE;
   const [status, setStatus] = useState<HelperStatus | null>(null);
   const [statusFailed, setStatusFailed] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
@@ -160,6 +201,8 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [addedSummary, setAddedSummary] = useState<string | null>(null);
+  const [voiceInserted, setVoiceInserted] = useState(false);
+  const undoTranscriptRef = useRef("");
 
   useEffect(() => {
     let cancelled = false;
@@ -178,14 +221,27 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
     };
   }, []);
 
-  const lastNonce = useRef(0);
+  const lastVoiceNonce = useRef(0);
   useEffect(() => {
-    if (submitRequest && submitRequest.nonce !== lastNonce.current && submitRequest.text.trim()) {
-      lastNonce.current = submitRequest.nonce;
-      setTranscript(submitRequest.text);
-      void handleDraft(submitRequest.text);
-    }
-  }, [submitRequest]);
+    if (!voiceTranscript || voiceTranscript.nonce === lastVoiceNonce.current) return;
+    const text = voiceTranscript.text.trim();
+    if (!text) return;
+    lastVoiceNonce.current = voiceTranscript.nonce;
+    setTranscript((previous) => {
+      undoTranscriptRef.current = previous;
+      return text;
+    });
+    setVoiceInserted(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setAddedSummary(null);
+    setClarify(null);
+    setAnswer("");
+    setDraft(null);
+    setDraftItems([]);
+    setPhase("idle");
+    onStateChange?.("idle");
+  }, [voiceTranscript, onStateChange]);
 
   const applyDraft = (resp: HelperDraftResponse, baseTranscript: string) => {
     setTranscript(baseTranscript);
@@ -291,6 +347,9 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
 
   const configured = status?.configured === true;
   const showDisabled = !configured;
+  const voiceMessage = voiceStatusMessage(voiceProps.status);
+  const voiceError =
+    voiceProps.status.state === "error" ? voiceProps.status.message : null;
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
@@ -303,6 +362,7 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
 
       <div aria-live="polite" role="status" className="text-sm text-muted-foreground">
         {phase === "thinking" && "Thinking…"}
+        {voiceMessage && <span className="block">{voiceMessage}</span>}
         {successMessage && !errorMessage && (
           <span className="block space-y-1">
             <span className="block">{successMessage}</span>
@@ -325,6 +385,17 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
         <p role="alert" className="text-sm text-destructive">
           {errorMessage}
         </p>
+      )}
+
+      {voiceError && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p id="helper-voice-error" role="alert" className="text-sm text-destructive">
+            {voiceError}
+          </p>
+          <Button type="button" variant="ghost" onClick={voiceProps.onReset} className="min-h-[40px]">
+            Dismiss
+          </Button>
+        </div>
       )}
 
       {showDisabled ? (
@@ -557,7 +628,10 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
                 <textarea
                   id="helper-transcript"
                   value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
+                  onChange={(e) => {
+                    setVoiceInserted(false);
+                    setTranscript(e.target.value);
+                  }}
                   placeholder="For example: I have a dentist appointment on Tuesday at 10:00 for 45 minutes."
                   maxLength={4000}
                   rows={3}
@@ -566,13 +640,45 @@ export function HelperPanel({ date, onConfirmed, onStateChange, submitRequest }:
                 <p className="text-xs text-muted-foreground">
                   {transcript.length} / 4000 characters
                 </p>
+                {voiceInserted && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setTranscript(undoTranscriptRef.current);
+                      setVoiceInserted(false);
+                    }}
+                    className="min-h-[40px]"
+                  >
+                    Undo voice input
+                  </Button>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Voice input is coming soon — typing only for now.
-              </p>
-              <Button type="button" variant="outline" disabled aria-disabled="true">
-                Voice is coming soon
-              </Button>
+              {voiceProps.supported ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={
+                    voiceProps.status.state === "listening"
+                      ? voiceProps.onStop
+                      : voiceProps.onStart
+                  }
+                  disabled={voiceProps.status.state === "processing"}
+                  aria-label={
+                    voiceProps.status.state === "listening"
+                      ? "Stop listening"
+                      : "Start voice input"
+                  }
+                  aria-describedby={voiceError ? "helper-voice-error" : undefined}
+                  className="min-h-[40px]"
+                >
+                  {voiceProps.status.state === "listening" ? "Stop listening" : "Use voice"}
+                </Button>
+              ) : (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {VOICE_UNSUPPORTED_MESSAGE}
+                </p>
+              )}
               <Button
                 type="submit"
                 disabled={phase === "thinking" || !transcript.trim()}
