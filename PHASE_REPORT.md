@@ -1344,3 +1344,102 @@ Screenshots:
 the existing Optimization link as the interim action, as requested. The
 read-only Part B research is separate and stops for approval before any
 seven-day solve or apply/preview UI is added.
+
+---
+
+## Phase 6 amendment — carry-over, solver busy, browser evidence
+
+**Changed**
+
+- `GET /schedule` now resolves completion from `planned_session_id`, not
+  `optimization_run_id`. A session completed in run A stays completed after a
+  re-plan creates run B, keeps its slot, and is counted once even if a duplicate
+  completion log exists.
+- The week-plan dialog formats the range as `Planning Tue 24 to Sun 29` instead
+  of `Planning 24 Tue to 29 Sun`.
+- Regression coverage added in
+  `backend/tests_integration/test_week_planning.py`:
+  - completed session stays completed after re-plan and is counted once
+  - completed session is absent from `moved` and `dropped`
+  - carried-session plan-health numbers do not change; the genuinely dropped
+    session moves from `missed` to `system_dropped` exactly once
+  - a saturated solver pool makes every plannable day return a per-day
+    `solver_busy` result sourced from the 503 `SolverBusyError`
+
+**Real test output**
+
+```
+backend focused week suite: 13 passed
+backend full suite:         176 passed, 1 skipped, 1 xpassed
+frontend suite:             70 passed
+```
+
+**Plan Health: `0 released, 2 dropped`**
+
+This is a real re-plan of **Tue 24 Nov 2026**, not stale seed data:
+
+- baseline run `da0edcbb81aa4ef8bba3f1f1e2f23ec1` (`plan_revision=1`) had
+  5 sessions and no releases
+- re-plan run `1885e4f9b817420a819cbca526b25e98` (`plan_revision=2`) retired two
+  baseline sessions that were not carried forward:
+  `fcef546a337d4a69a54025f00d0934ee` (Deep Work, period 40) and
+  `dc9dc18d503f424e9aaabc61b3a95315` (Healthy Cooking, period 52)
+- no session had `released_at`, so `released=0`; the two retired sessions are
+  what Plan Health counts as `system_dropped=2`
+
+On the host date **Wed 25 Nov** those numbers belong to the previous day's
+baseline, so they are stale for that date.
+
+**Pinned browser pass**
+
+The host clock stayed on **Wed 25 Nov 2026**. The backend process was pinned to
+`2026-11-24T12:00:00Z` with `clock.fixed_now`, and Playwright installed the same
+pinned time in the page. The browser therefore saw **Tue 24 Nov 2026** while the
+system clock was not changed.
+
+Actual run:
+
+- login OK; today's plan source was `committed` before the re-plan
+- one protected session was completed through the real API
+- future drafts seeded through the real preview/apply API for **5 days**
+- main preview: **5 of 7 days can be planned**, **2 unavailable**
+  - `Mon 23`: `past_day`
+  - `Tue 24`: real `solver_error`, `Team Sync: period 24/25 outside its time windows`
+- apply: **5 days applied**; skips were `Mon 23 past_day` and
+  `Tue 24 not_selected`
+- the protected completed session stayed at `06:00-06:30`, stayed
+  `isCompleted: true`, and remained absent from both `moved` and `dropped`
+- second run: **5** `No changes to this day.` entries
+- stale mutation: apply returned **409** with `week_plan_changed`; the UI showed
+  **This preview is out of date.** and the refresh button
+- viewports **1366x768**, **1440x950**, **390x844** had no horizontal overflow
+- the only console error was the expected 409; no page errors or failed requests
+- mocked solver-busy evidence: one future day (`Wed 25`) was given a
+  Playwright-injected per-day `solver_busy` result modelling the backend's 503.
+  The screenshot is labelled **MOCKED**; this is not claimed as a live
+  saturation run. The real 503 path is covered by the backend pool test.
+
+Screenshots:
+
+- `docs/images/phase6-week-plan-initial-1366x768.png`
+- `docs/images/phase6-week-plan-loading-1366x768.png`
+- `docs/images/phase6-week-plan-next-week-1366x768.png`
+- `docs/images/phase6-week-plan-preview-1366x768.png`
+- `docs/images/phase6-week-plan-applied-1366x768.png`
+- `docs/images/phase6-week-plan-filled-1366x768.png`
+- `docs/images/phase6-week-plan-no-changes-1366x768.png`
+- `docs/images/phase6-week-plan-stale-1366x768.png`
+- `docs/images/phase6-week-plan-solver-busy-MOCKED-1366x768.png`
+- `docs/images/phase6-week-plan-1440x950.png`
+- `docs/images/phase6-week-plan-390x844.png`
+- `docs/images/phase6-week-plan-zoom-draft-plan.png` (3x device scale)
+- `docs/images/phase6-week-plan-zoom-committed-plan.png` (3x device scale)
+
+**Notes**
+
+- The seeded week can produce a real `solver_error` on today when the protected
+  completion forces `Team Sync` outside its time windows; that is why the live
+  apply count is 5 rather than 6. It does not affect the protected-session
+  carry-over result.
+- The zoomed header captures use a separate 3x device-scale context because CSS
+  zoom produced blank element screenshots.

@@ -28,10 +28,9 @@ function dateAt(weekStart: string, offset: number): string {
 }
 
 function shortRangeDate(date: string): string {
-    return new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
-        weekday: "short",
-        day: "numeric",
-    });
+    const value = new Date(`${date}T12:00:00`);
+    const weekday = value.toLocaleDateString("en-US", { weekday: "short" });
+    return `${weekday} ${value.getDate()}`;
 }
 
 function day(weekStart: string, offset: number, overrides: Record<string, unknown> = {}) {

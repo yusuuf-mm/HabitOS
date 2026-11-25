@@ -59,10 +59,9 @@ function dateAtNoon(date: string): Date {
 }
 
 function shortRangeDate(date: string): string {
-  return dateAtNoon(date).toLocaleDateString("en-US", {
-    weekday: "short",
-    day: "numeric",
-  });
+  const value = dateAtNoon(date);
+  const weekday = value.toLocaleDateString("en-US", { weekday: "short" });
+  return `${weekday} ${value.getDate()}`;
 }
 
 function rangeLabel(start: string, end: string): string {

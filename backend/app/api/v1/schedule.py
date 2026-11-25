@@ -95,14 +95,13 @@ async def get_daily_schedule(
     response_items = []
     total_duration = 0
     
-    # Completion belongs to one planned session, not to the behaviour: the same
-    # behaviour can be scheduled twice in a day and only one of those sessions
-    # may be done (docs/METRIC.md §4).
+    # Completion follows the planned session, not the plan revision: a frozen
+    # session keeps its identity through a re-plan and stays completed. The same
+    # behaviour can also be scheduled twice in a day, so only the done session
+    # is marked complete (docs/METRIC.md §4).
     completion_result = await db.execute(
-        select(CompletionLog.planned_session_id)
-        .where(
-            (CompletionLog.user_id == current_user.id) &
-            (CompletionLog.optimization_run_id == run.id)
+        select(CompletionLog.planned_session_id).where(
+            CompletionLog.user_id == current_user.id
         )
     )
     completed_sessions = {
@@ -193,8 +192,7 @@ async def mark_complete(
     log_result = await db.execute(
         select(CompletionLog).where(
             (CompletionLog.user_id == current_user.id) &
-            (CompletionLog.planned_session_id == scheduled.planned_session_id) &
-            (CompletionLog.optimization_run_id == scheduled.optimization_run_id)
+            (CompletionLog.planned_session_id == scheduled.planned_session_id)
         )
     )
     if log_result.scalars().first():
@@ -246,8 +244,7 @@ async def mark_incomplete(
     log_result = await db.execute(
         select(CompletionLog).where(
             (CompletionLog.user_id == current_user.id) &
-            (CompletionLog.planned_session_id == scheduled.planned_session_id) &
-            (CompletionLog.optimization_run_id == scheduled.optimization_run_id)
+            (CompletionLog.planned_session_id == scheduled.planned_session_id)
         )
     )
     log = log_result.scalars().first()

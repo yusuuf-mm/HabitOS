@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -18,9 +20,12 @@ from app.models import (
     ObjectiveType,
     OptimizationRun,
     ScheduledBehavior,
+    User,
 )
+from app.optimization import executor
 from app.optimization.models import OptimizationSolution, ScheduleItem
 from app.services import week_planning
+from app.services.metrics import compute_day
 from tests_integration.support import plan_day
 
 
@@ -348,6 +353,42 @@ async def test_25_behaviour_cap_is_an_unavailable_reason(
 
 
 @pytest.mark.asyncio
+async def test_saturated_solver_pool_makes_every_day_unavailable_with_503(
+    auth_client: AsyncClient,
+):
+    """Holding the reserved worker makes each week day a solver-busy 503 result."""
+    await _behavior(auth_client, "Morning Walk", slots=["morning"])
+    assert SolverBusyError().status_code == 503
+
+    gate = threading.Event()
+
+    def held_solve():
+        gate.wait(timeout=10)
+        return None
+
+    held = asyncio.create_task(
+        executor.run_in_solver_pool(held_solve, timeout_seconds=20)
+    )
+    try:
+        for _ in range(100):
+            if executor.active_solves() >= 1:
+                break
+            await asyncio.sleep(0.01)
+        assert executor.active_solves() == 1
+
+        preview = await _preview(auth_client, plan_day())
+
+        solvable = [day for day in preview["days"] if day["available"]]
+        assert solvable == [], preview["days"]
+        for day in preview["days"]:
+            assert day["error"]["code"] == "solver_busy", day
+            assert "retry in a moment" in day["error"]["message"], day
+    finally:
+        gate.set()
+        await held
+
+
+@pytest.mark.asyncio
 async def test_week_apply_rolls_back_all_accepted_days_when_a_write_fails(
     auth_client: AsyncClient, db_session, monkeypatch
 ):
@@ -451,6 +492,17 @@ async def test_partly_done_monday_preserves_protected_sessions_and_retires_dropp
             completed_at=clock.now_utc(),
         )
     )
+    # A duplicate log for the same planned session must not make it count twice.
+    db_session.add(
+        CompletionLog(
+            user_id=user_id,
+            behavior_id=completed_b.id,
+            optimization_run_id=baseline.id,
+            planned_session_id=completed.planned_session_id,
+            actual_duration=25,
+            completed_at=clock.now_utc() + timedelta(minutes=2),
+        )
+    )
     await db_session.commit()
 
     original_solve = week_planning._solve_day
@@ -485,9 +537,29 @@ async def test_partly_done_monday_preserves_protected_sessions_and_retires_dropp
     }
     assert protected_ids.isdisjoint(diff_ids), today
     assert str(dropped.planned_session_id) in diff_ids
+    # (b) The completed session is never reported as moved or dropped.
+    assert str(completed.planned_session_id) not in {
+        item["plannedSessionId"] for item in today["moved"]
+    }
+    assert str(completed.planned_session_id) not in {
+        item["plannedSessionId"] for item in today["dropped"]
+    }
+
+    user = (await db_session.execute(select(User).where(User.id == user_id))).scalar_one()
+    metric_before = await compute_day(db_session, user, plan_day())
 
     applied = await _apply(auth_client, preview)
     assert applied.status_code == 200, applied.text
+
+    # (a) The completion follows planned_session_id into the new plan revision.
+    schedule = await auth_client.get(f"/api/v1/schedule?date={plan_day().isoformat()}")
+    assert schedule.status_code == 200, schedule.text
+    completed_view = next(
+        row
+        for row in schedule.json()["data"]["scheduledBehaviors"]
+        if row["plannedSessionId"] == str(completed.planned_session_id)
+    )
+    assert completed_view["isCompleted"] is True
 
     replanned = (
         await db_session.execute(
@@ -522,6 +594,22 @@ async def test_partly_done_monday_preserves_protected_sessions_and_retires_dropp
 
     await db_session.refresh(dropped)
     assert dropped.retired_revision == replanned.plan_revision
+
+    # (a) The carried completion is counted once, despite the duplicate log.
+    metric_after = await compute_day(db_session, user, plan_day())
+    assert metric_after.completed == 1
+    # (c) The carried sessions' health numbers do not change. The dropped
+    # session legitimately moves from missed to system_dropped, so those two
+    # counters are excluded here.
+    for field in (
+        "baseline",
+        "completed",
+        "released",
+        "denominator",
+        "completion_rate",
+    ):
+        assert getattr(metric_after, field) == getattr(metric_before, field), field
+    assert metric_after.system_dropped == metric_before.system_dropped + 1
 
 
 @pytest.mark.asyncio
