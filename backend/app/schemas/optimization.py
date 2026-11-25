@@ -166,10 +166,17 @@ class WeekPreviewRequest(BaseModel):
 
 
 class WeekApplyRequest(BaseModel):
-    """A preview must be accepted explicitly before anything is written."""
+    """Accept only the dates that actually solved during preview.
+
+    ``dates`` is the accepted subset of the previewed week. ``expectedResults``
+    maps each accepted date to a hash of the preview diff so apply can detect a
+    result that changed even when the input fingerprint did not.
+    """
 
     weekStart: date
     fingerprint: str = Field(..., min_length=1)
+    dates: List[date] = Field(default_factory=list)
+    expectedResults: Dict[str, str] = Field(default_factory=dict)
 
 
 class WeekSessionSlot(BaseModel):
@@ -205,6 +212,14 @@ class WeekPlanningError(BaseModel):
     message: str
 
 
+class WeekDaySkip(BaseModel):
+    """A date left out of apply, with the reason it was skipped."""
+
+    date: date
+    code: str
+    message: str
+
+
 class WeekDayResult(BaseModel):
     """The real baseline-vs-candidate diff for one date."""
 
@@ -221,15 +236,19 @@ class WeekDayResult(BaseModel):
     moved: List[WeekSessionMove] = Field(default_factory=list)
     dropped: List[WeekSession] = Field(default_factory=list)
     declines: List[Dict[str, Any]] = Field(default_factory=list)
+    resultHash: str = ""
 
 
 class WeekPreviewResult(BaseModel):
     """Write-nothing preview. Apply re-checks the fingerprint and re-solves."""
 
     weekStart: date
+    rangeStart: date
+    rangeEnd: date
     generatedAt: datetime
     fingerprint: str
     days: List[WeekDayResult]
+    skippedDays: List[WeekDaySkip] = Field(default_factory=list)
 
 
 class WeekDayApplyResult(BaseModel):
@@ -242,12 +261,16 @@ class WeekDayApplyResult(BaseModel):
     added: int
     moved: int
     dropped: int
+    resultHash: str = ""
 
 
 class WeekApplyResult(BaseModel):
-    """All-or-nothing result: every day is written or none is."""
+    """Atomic across the accepted days; skipped dates are reported explicitly."""
 
     weekStart: date
+    rangeStart: date
+    rangeEnd: date
     fingerprint: str
     appliedDays: int
     days: List[WeekDayApplyResult]
+    skippedDays: List[WeekDaySkip] = Field(default_factory=list)

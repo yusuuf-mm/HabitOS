@@ -57,6 +57,13 @@ function shortDate(dateStr: string): string {
   });
 }
 
+function planLabel(source?: WeekDayData["planSource"]): string | null {
+  if (source === "draft") return "draft plan";
+  if (source === "committed") return "committed plan";
+  if (source === "fallback") return "re-planned today";
+  return null;
+}
+
 interface TimedInterval {
   key: string;
   start: number;
@@ -468,11 +475,12 @@ export function WeekCalendar({
         {days.map((day) => {
           const isToday = day.date === todayStr;
           const isSelected = day.date === selectedDate;
+          const sourceLabel = planLabel(day.planSource);
           return (
             <button
               key={day.date}
               type="button"
-              aria-label={`Open agenda for ${fullDate(day.date)}${day.unavailable ? " (unavailable)" : ""}`}
+              aria-label={`Open agenda for ${fullDate(day.date)}${sourceLabel ? ` (${sourceLabel})` : ""}${day.unavailable ? " (unavailable)" : ""}`}
               aria-pressed={isSelected}
               onClick={() => {
                 onSelectDate(day.date);
@@ -494,6 +502,11 @@ export function WeekCalendar({
               <span className="block">
                 {new Date(`${day.date}T00:00:00`).getDate()}
               </span>
+              {sourceLabel && (
+                <span className="block text-[8px] font-normal leading-tight text-muted-foreground">
+                  {sourceLabel}
+                </span>
+              )}
             </button>
           );
         })}
@@ -502,7 +515,14 @@ export function WeekCalendar({
       {compact ? (
         // 390px: the day strip above plus a single-day agenda. No inner scrollbar.
         <div className="mt-4">
-          <h3 className="text-sm font-semibold">{shortDate(selectedDay?.date ?? "")}</h3>
+          <h3 className="text-sm font-semibold">
+            {shortDate(selectedDay?.date ?? "")}
+            {planLabel(selectedDay?.planSource) && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {planLabel(selectedDay?.planSource)}
+              </span>
+            )}
+          </h3>
           {selectedDay?.unavailable ? (
             <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
               This day&apos;s schedule could not be loaded.

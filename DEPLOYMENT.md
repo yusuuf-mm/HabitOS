@@ -219,6 +219,27 @@ For higher traffic:
 2. Consider using Docker Swarm or Kubernetes for horizontal scaling
 3. Set up database connection pooling
 
+### Week planning request timeout
+
+`POST /api/v1/optimization/week/preview` and `POST /api/v1/optimization/week/apply`
+solve up to seven days in one request. The browser gives those two endpoints a
+90-second client timeout; all other API calls keep the 30-second default. The
+dialog says `Planning N days...` while the request is in flight and does not
+show a fake progress bar.
+
+**Host limit risk:** a reverse proxy, load balancer or serverless host may end
+the request earlier than 90 seconds. A preview timeout leaves no writes; an
+apply timeout is less certain because the server may have committed before the
+client gave up. Refresh the week before retrying an apply, and watch the backend
+logs for the run ids. Raise the host/proxy timeout to at least 90 seconds if
+these endpoints are exposed; a lower limit will cut off a legitimate solve.
+
+**Follow-up:** move week preview/apply to a background job with a job id and
+polling, so a browser or proxy disconnect cannot abandon a running solve and the
+UI can report real per-day progress. Until that exists, the synchronous path is
+the supported one and the 90-second ceiling is a deliberate limit, not a
+guarantee that every week completes.
+
 ### Security Hardening
 
 - [ ] Change all default passwords

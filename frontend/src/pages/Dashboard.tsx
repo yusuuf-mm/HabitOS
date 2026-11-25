@@ -150,6 +150,7 @@ export default function Dashboard() {
             commitments: old?.commitments ?? [],
             deadlines: old?.deadlines ?? [],
             unavailable: true,
+            planSource: old?.planSource ?? "none",
           };
         }
         const entries = byDate.get(date) ?? previous.get(date)?.commitments ?? [];
@@ -169,6 +170,7 @@ export default function Dashboard() {
             completed: sb.isCompleted,
             releasedAt: sb.releasedAt ?? null,
           })),
+          planSource: schedule.planSource ?? "none",
           commitments: entries.filter((e) => e.kind === "commitment"),
           deadlines: [
             ...entries.filter((e) => e.kind === "deadline"),
@@ -277,6 +279,10 @@ export default function Dashboard() {
   }
 
   const weekLabel = `${iso(weekStart)} to ${iso(addDays(weekStart, 6))}`;
+  const todayISO = iso(new Date());
+  const canPlanWeek = Array.from({ length: 7 }, (_, index) =>
+    iso(addDays(weekStart, index)),
+  ).some((date) => date >= todayISO);
   const goWeek = (weeks: number) => {
     const next = addDays(weekStart, weeks * 7);
     setWeekStart(next);
@@ -354,6 +360,8 @@ export default function Dashboard() {
             <Button
               size="sm"
               className="ml-auto"
+              disabled={!canPlanWeek}
+              title={canPlanWeek ? undefined : "This week is entirely in the past."}
               onClick={() => setWeekPlanOpen(true)}
             >
               <CalendarRange className="h-4 w-4" aria-hidden="true" />

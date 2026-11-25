@@ -20,6 +20,7 @@ import type {
   DashboardSummary,
   AnalyticsData,
   ApiResponse,
+  WeekApplyRequest,
   WeekApplyResult,
   WeekPreviewResult,
 } from "@/types";
@@ -138,12 +139,11 @@ export const optimizationApi = {
   },
 
   async applyWeek(
-    weekStart: string,
-    fingerprint: string,
+    payload: WeekApplyRequest,
   ): Promise<ApiResponse<WeekApplyResult>> {
     return apiPost(
       "/optimization/week/apply",
-      { weekStart, fingerprint },
+      payload,
       { timeout: 90_000 },
     );
   },

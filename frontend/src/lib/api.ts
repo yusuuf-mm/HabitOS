@@ -35,9 +35,22 @@ api.interceptors.response.use(
   (res) => res.data,
   (err) => {
     const status = err.response?.status;
+    const detail = err.response?.data?.detail;
+    const detailMessage =
+      typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object"
+        ? detail.message
+        : undefined;
     const message =
-      err.response?.data?.message || err.message || "Request failed";
-    return Promise.reject({ code: "API_ERROR", message, status });
+      err.response?.data?.message || detailMessage || err.message || "Request failed";
+    // Surface FastAPI's machine-readable detail code so callers can distinguish
+    // a stale week preview from a transient failure without parsing prose.
+    const code =
+      detail && typeof detail === "object" && detail.code
+        ? String(detail.code)
+        : "API_ERROR";
+    return Promise.reject({ code, message, status, detail });
   },
 );
 

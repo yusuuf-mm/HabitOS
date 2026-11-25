@@ -20,6 +20,9 @@ class DailySchedule(BaseModel):
     createdAt: datetime = Field(..., validation_alias="created_at", serialization_alias="createdAt")
     # Why the planner left behaviours out, straight from the run's diagnostics.
     declines: List[dict] = Field(default_factory=list)
+    # draft | committed | fallback | none — lets the calendar label future
+    # drafts differently from the committed plan for today.
+    planSource: str = "none"
 
     class Config:
         """Pydantic config."""

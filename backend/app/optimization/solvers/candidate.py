@@ -164,6 +164,7 @@ class CandidateSolver:
         optimization_run_id: UUID,
         frozen_periods: Dict[int, Dict[int, int]],
         previous_starts: Optional[Dict[int, int]] = None,
+        earliest_start: Optional[int] = None,
     ) -> OptimizationSolution:
         """Re-solve the future with every elapsed period pinned to its record.
 
@@ -171,6 +172,10 @@ class CandidateSolver:
         session in the plan being replaced. Carried sessions pay
         ``STABILITY_LAMBDA_PER_MINUTE`` per minute they move from that start,
         so the re-plan keeps sessions still unless moving earns its keep.
+
+        *earliest_start* is the first period that may hold a new session. Frozen
+        pins end before "now" when there is a gap in the old plan; without this
+        bound the solver could fill that elapsed gap.
         """
         return self._solve(
             problem,
@@ -178,6 +183,7 @@ class CandidateSolver:
             frozen_periods=frozen_periods,
             forced_ids=(),
             previous_starts=previous_starts,
+            earliest_start=earliest_start,
         )
 
     def solve_forced(
@@ -206,6 +212,7 @@ class CandidateSolver:
         forced_ids: Set[str],
         solver_name: Optional[str] = None,
         previous_starts: Optional[Dict[int, int]] = None,
+        earliest_start: Optional[int] = None,
     ) -> OptimizationSolution:
         started = time.perf_counter()
         partial = frozen_periods is not None
@@ -221,7 +228,10 @@ class CandidateSolver:
 
         periods = problem.time_periods
         all_frozen = {t for pins in frozen_periods.values() for t in pins}
-        earliest_free = max(all_frozen) + 1 if all_frozen else 0
+        earliest_after_pins = max(all_frozen) + 1 if all_frozen else 0
+        # Pins mark old sessions, not the current clock. A gap between the last
+        # pin and "now" is still elapsed time and cannot hold a new session.
+        earliest_free = max(earliest_after_pins, earliest_start or 0)
 
         frozen_items: List[ScheduleItem] = []
         frozen_minutes: Dict[int, int] = {}
