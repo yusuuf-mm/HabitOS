@@ -111,6 +111,22 @@ def test_frozen_periods_are_never_replanned():
     assert validate_schedule(problem, solution.schedule_items) == []
 
 
+def test_partial_solve_respects_earliest_start_even_with_a_gap():
+    # The last frozen cell ends at 29, but "now" is 40: a gap is still elapsed
+    # time and must not be filled by a new session.
+    behavior = _behavior(lo=60, hi=60)
+    problem = _problem([behavior])
+    frozen = {0: {28: 1}}
+    solution = CandidateSolver(timeout_seconds=10).solve_partial_day(
+        problem, uuid4(), frozen, earliest_start=40
+    )
+
+    planned = [i for i in solution.schedule_items if i.time_period != 28]
+    assert planned, "the remaining minutes must still be planned"
+    assert min(i.time_period for i in planned) >= 40
+    assert validate_schedule(problem, solution.schedule_items) == []
+
+
 def test_behaviour_with_no_room_is_declined_not_dropped():
     # Two hours of midday, all of it already elapsed: nothing is left to place,
     # and the behaviour is reported rather than silently dropped.

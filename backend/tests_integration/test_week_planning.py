@@ -528,12 +528,13 @@ async def test_partly_done_monday_preserves_protected_sessions_and_retires_dropp
     preview = await _preview(auth_client, plan_day())
     today = preview["days"][0]
     protected_ids = {
-        completed.planned_session_id,
-        in_progress.planned_session_id,
-        released.planned_session_id,
+        str(completed.planned_session_id),
+        str(in_progress.planned_session_id),
+        str(released.planned_session_id),
     }
     diff_ids = {
-        item["plannedSessionId"] for item in today["moved"] + today["dropped"]
+        item["plannedSessionId"]
+        for item in today["added"] + today["moved"] + today["dropped"]
     }
     assert protected_ids.isdisjoint(diff_ids), today
     assert str(dropped.planned_session_id) in diff_ids
@@ -571,7 +572,7 @@ async def test_partly_done_monday_preserves_protected_sessions_and_retires_dropp
         )
     ).scalars().one()
     carried = {
-        row.planned_session_id
+        str(row.planned_session_id)
         for row in (
             await db_session.execute(
                 select(ScheduledBehavior).where(

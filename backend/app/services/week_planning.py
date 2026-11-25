@@ -497,6 +497,7 @@ async def _solve_day(inputs: DayInputs, low_priority: bool) -> OptimizationSolut
             timeout_seconds=settings.OPTIMIZATION_TIMEOUT_SECONDS,
             low_priority=low_priority,
             previous_starts=inputs.previous_starts or {},
+            earliest_start=inputs.current_period or 0,
         )
     return await run_in_solver_pool(
         solver.solve,
@@ -742,7 +743,10 @@ async def _prepare_day(
     planned, plannable_current = _merge_protected(
         inputs, solution.schedule_items, inputs.current_sessions
     )
-    added, moved, dropped = _diff_sessions(plannable_current, planned)
+    # Compare against every current session, including protected ones. They are
+    # carried into `planned` unchanged; diffing against `plannable_current`
+    # would falsely report them as added or moved on every re-plan.
+    added, moved, dropped = _diff_sessions(inputs.current_sessions, planned)
     return PreparedDay(
         inputs=inputs,
         solution=solution,

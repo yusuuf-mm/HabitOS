@@ -1351,32 +1351,48 @@ seven-day solve or apply/preview UI is added.
 
 **Changed**
 
-- `GET /schedule` now resolves completion from `planned_session_id`, not
+- `GET /schedule` resolves completion from `planned_session_id`, not
   `optimization_run_id`. A session completed in run A stays completed after a
   re-plan creates run B, keeps its slot, and is counted once even if a duplicate
   completion log exists.
 - The week-plan dialog formats the range as `Planning Tue 24 to Sun 29` instead
-  of `Planning 24 Tue to 29 Sun`.
-- Regression coverage added in
-  `backend/tests_integration/test_week_planning.py`:
-  - completed session stays completed after re-plan and is counted once
-  - completed session is absent from `moved` and `dropped`
-  - carried-session plan-health numbers do not change; the genuinely dropped
-    session moves from `missed` to `system_dropped` exactly once
-  - a saturated solver pool makes every plannable day return a per-day
-    `solver_busy` result sourced from the 503 `SolverBusyError`
+  of `Planning 24 Tue to 29 Sun`; apply accepts explicit `dates` plus each day's
+  `resultHash`, and exposes `rangeStart`, `rangeEnd`, `resultHash` and
+  `skippedDays`.
+- Solver-busy, protected-conflict and the 25-behaviour cap are per-day
+  `Unavailable` reasons rather than whole-request failures.
+- `CandidateSolver.solve_partial_day` now accepts `earliest_start`. Week
+  planning passes the plan-local current period, so a gap between the last
+  frozen pin and "now" cannot be filled by a new session. The regression
+  `test_partial_solve_respects_earliest_start_even_with_a_gap` failed with
+  `assert 30 >= 40` before the fix and passes after it. The existing
+  `/schedule/reoptimize` contract is deliberately unchanged.
+- The week preview now diffs `planned` against **all** current sessions,
+  including protected ones. Previously protected sessions were appended to
+  `planned` but excluded from the comparison list, so a re-plan falsely
+  reported them as `added`/`moved`. The protected-session regression now
+  compares IDs as strings and checks `added` as well as `moved`/`dropped`;
+  it failed before the fix and passes after it.
+- Regression coverage in `backend/tests_integration/test_week_planning.py`:
+  completed session stays completed after re-plan and is counted once; it is
+  absent from `added`, `moved` and `dropped`; carried-session Plan Health
+  numbers do not change; the genuinely dropped session moves from `missed` to
+  `system_dropped` exactly once; a saturated solver pool makes every plannable
+  day return a per-day `solver_busy` result sourced from the 503
+  `SolverBusyError`.
 
 **Real test output**
 
 ```
-backend focused week suite: 13 passed
-backend full suite:         176 passed, 1 skipped, 1 xpassed
-frontend suite:             70 passed
+backend focused solver/week suite: 48 passed
+backend full suite:                177 passed, 1 skipped, 1 xpassed
+frontend suite:                    70 passed
 ```
 
 **Plan Health: `0 released, 2 dropped`**
 
-This is a real re-plan of **Tue 24 Nov 2026**, not stale seed data:
+That dev-data reading came from a real re-plan of **Tue 24 Nov 2026**, not stale
+seed data:
 
 - baseline run `da0edcbb81aa4ef8bba3f1f1e2f23ec1` (`plan_revision=1`) had
   5 sessions and no releases
@@ -1388,28 +1404,41 @@ This is a real re-plan of **Tue 24 Nov 2026**, not stale seed data:
   what Plan Health counts as `system_dropped=2`
 
 On the host date **Wed 25 Nov** those numbers belong to the previous day's
-baseline, so they are stale for that date.
+baseline, so they are stale for that date. The fresh pinned fixture below uses
+a solver-generated baseline and reports `systemDropped: 0` in its main preview.
 
 **Pinned browser pass**
 
 The host clock stayed on **Wed 25 Nov 2026**. The backend process was pinned to
 `2026-11-24T12:00:00Z` with `clock.fixed_now`, and Playwright installed the same
-pinned time in the page. The browser therefore saw **Tue 24 Nov 2026** while the
-system clock was not changed.
+pinned time in the page (`Tue Nov 24 2026 12:00:01 GMT+0100`). The system clock
+was not changed.
+
+To remove a fixture artefact, Tue 24's baseline was regenerated through the real
+`/optimization/solve` API and committed as the day's baseline (run
+`c02ffe7b-87ea-4dca-9e7d-437dd627be60`, `plan_revision=1`,
+`baseline_revision=1`). The earlier seeded baseline had placed `Team Sync` at
+period 24 / `06:00`, outside its `07:00-12:00` and `14:00-17:00` windows;
+completing and freezing that slot made validation reject the whole day as
+`solver_error`. That was the second unavailable day in the earlier **5 of 7**
+run, not "today frozen" by design.
 
 Actual run:
 
 - login OK; today's plan source was `committed` before the re-plan
-- one protected session was completed through the real API
+- one protected session (`c50ec005-9bf9-4fc5-b35b-e045e4c7b5a8`) was completed
+  through the real API
 - future drafts seeded through the real preview/apply API for **5 days**
-- main preview: **5 of 7 days can be planned**, **2 unavailable**
+- main preview: **6 of 7 days can be planned**, **1 unavailable**
   - `Mon 23`: `past_day`
-  - `Tue 24`: real `solver_error`, `Team Sync: period 24/25 outside its time windows`
-- apply: **5 days applied**; skips were `Mon 23 past_day` and
-  `Tue 24 not_selected`
-- the protected completed session stayed at `06:00-06:30`, stayed
+  - `Tue 24`: `todayMode: partial`, no error
+- apply: **6 days applied**; the only skip was `Mon 23 past_day`
+- the protected completed session stayed at `05:15-05:30`, stayed
   `isCompleted: true`, and remained absent from both `moved` and `dropped`
-- second run: **5** `No changes to this day.` entries
+- second run: **6** `No changes to this day.` entries; all six plannable days
+  had `added: 0`, `moved: 0`, `dropped: 0`
+- zoomed 3x headers: `Open agenda for Sunday, Nov 29 (draft plan)` and
+  `Open agenda for Tuesday, Nov 24 (committed plan)`
 - stale mutation: apply returned **409** with `week_plan_changed`; the UI showed
   **This preview is out of date.** and the refresh button
 - viewports **1366x768**, **1440x950**, **390x844** had no horizontal overflow
@@ -1437,9 +1466,8 @@ Screenshots:
 
 **Notes**
 
-- The seeded week can produce a real `solver_error` on today when the protected
-  completion forces `Team Sync` outside its time windows; that is why the live
-  apply count is 5 rather than 6. It does not affect the protected-session
-  carry-over result.
+- The earlier **5 of 7** result had two causes, both now understood: the invalid
+  seeded baseline described above, and the protected-diff bug that kept the
+  second run at five `No changes` entries even after today became plannable.
 - The zoomed header captures use a separate 3x device-scale context because CSS
   zoom produced blank element screenshots.
