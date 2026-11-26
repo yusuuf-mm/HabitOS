@@ -63,9 +63,15 @@ def do_run_migrations(connection):
 
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
+    connect_args = (
+        {"statement_cache_size": 0}
+        if settings.DATABASE_DISABLE_PREPARED_STATEMENTS
+        else {}
+    )
     connectable = create_async_engine(
         str(settings.DATABASE_URL),
         poolclass=NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.begin() as connection:
