@@ -1471,3 +1471,91 @@ Screenshots:
   second run at five `No changes` entries even after today became plannable.
 - The zoomed header captures use a separate 3x device-scale context because CSS
   zoom produced blank element screenshots.
+
+---
+
+## Phase 7 — Voice input on the typed plan assistant
+
+Branch: `feat/voice-input`. Backend and model split were left unchanged:
+`[NVIDIA_MODEL_FAST, NVIDIA_MODEL_FAST, NVIDIA_MODEL_STRONG]`.
+
+**Changed**
+
+- `frontend/src/lib/speechRecognition.ts` feature-detects
+  `SpeechRecognition` / `webkitSpeechRecognition`.
+- `frontend/src/hooks/useSpeechRecognition.ts` owns the recognition lifecycle:
+  explicit start, `continuous = true`, `interimResults = false`,
+  `maxAlternatives = 1`, final-chunk accumulation, and distinct `idle`,
+  `listening`, `processing`, and `error` states. There is no timer-based or fake
+  progress.
+- `frontend/src/components/HelperOrb.tsx` opens the plan-assistant panel only.
+  It does not start the microphone.
+- `frontend/src/components/HelperPanel.tsx` keeps the transcript editable,
+  starts only from **Use voice**, shows a prominent **Done** button while
+  listening/processing, and keeps the transcript after Done. The only small
+  action is **Undo voice input**, which restores the previous editable text.
+  Anything that reaches the plan still goes through the existing draft and
+  confirm card; voice never auto-sends.
+- Error mapping covers permission denied, no speech, network failure, and
+  unsupported browsers. Unsupported browsers show the exact text
+  `Voice isn't supported in this browser, type instead`, and text entry still
+  works.
+- Our code does not call `getUserMedia`, `MediaRecorder`, or send `Blob` /
+  `FormData` / audio fields. The browser recognition API handles the microphone;
+  the helper API still receives transcript text only.
+
+**Commits**
+
+```
+43c8875 feat(voice): add feature-detected speech recognition hook
+cb79eb4 feat(voice): fill editable helper input from voice without auto-send
+100e44f test(voice): cover mocked recognition and no-audio payloads
+419df98 feat(voice): require explicit start and Done to stop
+```
+
+**Real test output**
+
+```
+frontend: npm run test     -> 11 files, 79 tests passed
+frontend: npx tsc --noEmit -> exit 0
+frontend: npm run build    -> ✓ built in 36.02s
+```
+
+The build still reports the pre-existing Browserslist age warning and the
+>500 kB chunk warning. No new dependency was added.
+
+Tests in `frontend/src/test/voiceInput.test.tsx` are labelled **MOCKED** and
+cover: unsupported fallback plus typing, permission denied, no-speech and
+network errors, explicit start/Done, final-chunk accumulation, editable
+undoable transcript before send, and no draft/confirm write before explicit
+actions. `frontend/src/test/helperApiPayload.test.ts` is also labelled
+**MOCKED** and asserts that draft and confirm requests contain text/items only,
+never audio payloads.
+
+**Real browser evidence**
+
+The user retested in Chrome on their local PC at `1366x768` and supplied:
+
+- `docs/images/voice-retest-1366x768.png`
+
+That screenshot shows the Plan assistant panel open with:
+
+- status `Processing final transcript…`
+- a visible `Done` button and the text `Finish speaking, then select Done.`
+- the editable textarea filled with
+  `I will be going through my system design PDF by 10:00 p.m. tomorrow`
+- `Undo voice input`, `Use voice`, and `Turn this into a plan`
+- no confirm card and no visible plan change
+
+The screenshot confirms the desktop visual state and the editable transcript
+before confirmation. It does **not** by itself prove that the Done click stopped
+recognition, that a pause did not cut speech off, or that the `390px` layout was
+checked.
+
+**Not covered**
+
+- `390px` was intentionally not tested: the user runs HabitOS on a local PC and
+  deferred the mobile viewport. This is recorded as out of scope for this pass,
+  not as a passed check.
+- Browser automation was not used for the real-mic pass; the evidence above is
+  the user's supplied screenshot and retest.
