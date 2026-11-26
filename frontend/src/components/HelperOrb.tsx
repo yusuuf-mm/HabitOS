@@ -67,7 +67,6 @@ export function HelperOrb({ onChanged }: { onChanged?: () => void }) {
 
   const openPanel = () => {
     setOpen(true);
-    if (!unavailable && voice.supported) voice.start();
   };
 
   const closePanel = () => {

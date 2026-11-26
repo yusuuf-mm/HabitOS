@@ -48,6 +48,7 @@ export function useSpeechRecognition({
   const callbackRef = useRef(onFinalTranscript);
   const mountedRef = useRef(true);
   const failedRef = useRef(false);
+  const finalTranscriptRef = useRef("");
 
   useEffect(() => {
     callbackRef.current = onFinalTranscript;
@@ -88,27 +89,29 @@ export function useSpeechRecognition({
     }
 
     failedRef.current = false;
+    finalTranscriptRef.current = "";
     const recognition = new Constructor();
     recognition.lang = lang;
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => setStatusSafe({ state: "listening" });
 
     recognition.onresult = (event) => {
-      let finalTranscript = "";
+      let chunk = "";
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
         if (!result.isFinal) continue;
         for (let j = 0; j < result.length; j += 1) {
-          finalTranscript += result[j].transcript;
+          chunk += result[j].transcript;
         }
       }
-      const text = finalTranscript.trim();
+      const text = chunk.trim();
       if (!text) return;
+      finalTranscriptRef.current = `${finalTranscriptRef.current} ${text}`.trim();
       setStatusSafe({ state: "processing" });
-      callbackRef.current(text);
+      callbackRef.current(finalTranscriptRef.current);
     };
 
     recognition.onerror = (event) => {
@@ -160,6 +163,7 @@ export function useSpeechRecognition({
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     failedRef.current = false;
+    finalTranscriptRef.current = "";
     setStatusSafe({ state: "idle" });
   }, [setStatusSafe]);
 

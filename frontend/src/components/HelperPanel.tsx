@@ -381,6 +381,18 @@ export function HelperPanel({
         )}
       </div>
 
+      {(voiceProps.status.state === "listening" ||
+        voiceProps.status.state === "processing") && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={voiceProps.onStop} className="min-h-[40px]">
+            Done
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Finish speaking, then select Done.
+          </span>
+        </div>
+      )}
+
       {errorMessage && (
         <p role="alert" className="text-sm text-destructive">
           {errorMessage}
@@ -664,11 +676,6 @@ export function HelperPanel({
                       : voiceProps.onStart
                   }
                   disabled={voiceProps.status.state === "processing"}
-                  aria-label={
-                    voiceProps.status.state === "listening"
-                      ? "Stop listening"
-                      : "Start voice input"
-                  }
                   aria-describedby={voiceError ? "helper-voice-error" : undefined}
                   className="min-h-[40px]"
                 >

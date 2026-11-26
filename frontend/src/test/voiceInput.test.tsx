@@ -46,6 +46,7 @@ class MockSpeechRecognition {
   continuous = false;
   interimResults = false;
   maxAlternatives = 1;
+  stopCalls = 0;
   onstart: (() => void) | null = null;
   onresult: ((event: unknown) => void) | null = null;
   onerror: ((event: unknown) => void) | null = null;
@@ -62,6 +63,7 @@ class MockSpeechRecognition {
   }
 
   stop() {
+    this.stopCalls += 1;
     this.onend?.();
   }
 
@@ -81,7 +83,6 @@ class MockSpeechRecognition {
         },
       },
     });
-    this.onend?.();
   }
 
   emitError(code: string) {
@@ -150,6 +151,13 @@ async function openConfiguredPanel() {
   });
 }
 
+async function openAndStartVoice() {
+  await openConfiguredPanel();
+  await act(async () => {
+    fireEvent.click(await screen.findByRole("button", { name: /^use voice$/i }));
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   MockSpeechRecognition.instances = [];
@@ -166,6 +174,58 @@ afterEach(() => {
 });
 
 describe("voice input (MOCKED recognition API)", () => {
+  it("MOCKED: orb opens without starting; Use voice starts continuous listening and Done stops it", async () => {
+    installRecognition({ kind: "none" });
+    await openConfiguredPanel();
+
+    expect(MockSpeechRecognition.instances).toHaveLength(0);
+    expect(screen.queryByText("Listening…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^use voice$/i }));
+    });
+
+    expect(MockSpeechRecognition.instances).toHaveLength(1);
+    expect(MockSpeechRecognition.instances[0].continuous).toBe(true);
+    expect(screen.getByText("Listening…")).toBeInTheDocument();
+
+    await act(async () => {
+      MockSpeechRecognition.instances[0].emitTranscript("Dentist tomorrow at 9");
+    });
+
+    const input = screen.getByLabelText(/what would you like to plan/i);
+    expect(input).toHaveValue("Dentist tomorrow at 9");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^done$/i }));
+    });
+
+    expect(MockSpeechRecognition.instances[0].stopCalls).toBe(1);
+    expect(input).toHaveValue("Dentist tomorrow at 9");
+    expect(screen.queryByText("Listening…")).not.toBeInTheDocument();
+    expect(draft).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("MOCKED: continuous final chunks accumulate until Done", async () => {
+    installRecognition({ kind: "none" });
+    await openAndStartVoice();
+    const recognition = MockSpeechRecognition.instances[0];
+
+    await act(async () => {
+      recognition.emitTranscript("Dentist tomorrow at 9,");
+    });
+    await act(async () => {
+      recognition.emitTranscript("then move it to 10.");
+    });
+
+    expect(screen.getByLabelText(/what would you like to plan/i)).toHaveValue(
+      "Dentist tomorrow at 9, then move it to 10.",
+    );
+    expect(draft).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
   it("MOCKED: unsupported browser shows the exact fallback and typing still works", async () => {
     installUnsupported();
     draft.mockResolvedValue(draftResponse());
@@ -186,7 +246,7 @@ describe("voice input (MOCKED recognition API)", () => {
 
   it("MOCKED: permission denied shows the error state and sends no request", async () => {
     installRecognition({ kind: "error", code: "not-allowed" });
-    await openConfiguredPanel();
+    await openAndStartVoice();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /microphone permission was denied/i,
@@ -198,14 +258,14 @@ describe("voice input (MOCKED recognition API)", () => {
 
   it("MOCKED: no-speech and network errors are distinct states", async () => {
     installRecognition({ kind: "error", code: "no-speech" });
-    await openConfiguredPanel();
+    await openAndStartVoice();
     expect(await screen.findByRole("alert")).toHaveTextContent(/didn't hear anything/i);
     expect(draft).not.toHaveBeenCalled();
   });
 
   it("MOCKED: network error is distinct from no-speech", async () => {
     installRecognition({ kind: "error", code: "network" });
-    await openConfiguredPanel();
+    await openAndStartVoice();
     expect(await screen.findByRole("alert")).toHaveTextContent(/needs a network connection/i);
     expect(draft).not.toHaveBeenCalled();
   });
@@ -214,7 +274,7 @@ describe("voice input (MOCKED recognition API)", () => {
     installRecognition({ kind: "none" });
     draft.mockResolvedValue(draftResponse());
     confirm.mockResolvedValue({ confirmationId: "c-1", itemIds: ["i-1"] });
-    await openConfiguredPanel();
+    await openAndStartVoice();
 
     expect(screen.getByText("Listening…")).toBeInTheDocument();
 
@@ -252,7 +312,7 @@ describe("voice input (MOCKED recognition API)", () => {
   it("MOCKED: a plan change from voice reaches the confirm card before any write", async () => {
     installRecognition({ kind: "none" });
     draft.mockResolvedValue(draftResponse());
-    await openConfiguredPanel();
+    await openAndStartVoice();
 
     await act(async () => {
       MockSpeechRecognition.instances[0].emitTranscript("Dentist tomorrow at 9:30");
