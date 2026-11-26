@@ -214,10 +214,11 @@ graph TB
 - **Constraints**: Time budgets, energy limits, time slot preferences, behavior exclusivity
 
 #### 5. **Data Layer**
-- **Production Database**: PostgreSQL 15 with async driver (asyncpg)
+- **Production Database**: PostgreSQL 15 with async driver (asyncpg), locally or through Supabase's session pooler
 - **Development Database**: SQLite with aiosqlite for local development
-- **Migrations**: Alembic for version-controlled schema changes
+- **Migrations**: Alembic for version-controlled schema changes, including RLS enablement on every `public` table
 - **Multi-Environment Support**: Automatic switching between SQLite (dev) and PostgreSQL (prod) via environment variables
+- **Access model**: HabitOS keeps its own JWT auth; Supabase Auth and `service_role` are not used by the app
 
 ---
 
@@ -407,6 +408,55 @@ DEBUG=True
 ```bash
 VITE_API_URL=http://localhost:8000/api/v1
 ```
+
+### Supabase Postgres (managed database)
+
+HabitOS keeps its own JWT auth. Supabase supplies only Postgres; no Supabase
+Auth user or `service_role` key is used by the app. CI and local development
+can keep using a plain Postgres URL.
+
+1. Create or select the Supabase project, then open
+   **Project Settings → Database → Connection strings → Connect** and choose
+   **Session pooler** (port `5432`). Copy the exact pooler host from that
+   dialog — it is not derived from the region.
+2. Copy `.env.example` to `.env` and `backend/.env.example` to `backend/.env`.
+   Only the examples are committed; both real env files are gitignored. Fill
+   in placeholders like this (never commit the real password or a
+   `service_role` key):
+
+   ```bash
+   DATABASE_URL=postgresql+asyncpg://postgres.<PROJECT-REF>:<URL-ENCODED-PASSWORD>@<POOLER-HOST>:5432/postgres
+   SUPABASE_URL=https://<PROJECT-REF>.supabase.co
+   SUPABASE_ANON_KEY=<anon-key>
+   DATABASE_DISABLE_PREPARED_STATEMENTS=False
+   ```
+
+   URL-encode the database password (`@` → `%40`, `%` → `%25`, etc.). The
+   shared **transaction** pooler on port `6543` does not support prepared
+   statements; if you switch to it, set
+   `DATABASE_DISABLE_PREPARED_STATEMENTS=True` and re-run the checks below.
+   It is not the connection mode used by this branch.
+3. From `backend/`, set up a **fresh** database:
+
+   ```bash
+   uv sync
+   uv run alembic upgrade head
+   uv run alembic check
+   uv run python scripts/seed_data.py   # destructive: use only on a fresh DB
+   ```
+
+4. Verify the live database:
+
+   ```bash
+   uv run python scripts/supabase_smoke.py       # register, login, create, solve, week preview
+   uv run python scripts/supabase_rls_check.py   # anon REST cannot read any public table
+   ```
+
+The RLS migration enables row-level security on every `public` table and adds
+no policies. PostgREST therefore returns an empty array to the anon key (HTTP
+200), while the application's owner connection still works because `FORCE ROW
+LEVEL SECURITY` is deliberately off. The examples in `docs/SUPABASE.md`
+contain placeholders only.
 
 ### Database Migrations
 

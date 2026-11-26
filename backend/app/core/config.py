@@ -19,6 +19,16 @@ INSECURE_SECRET_KEYS = frozenset({
 })
 
 
+def escape_alembic_url(url: str) -> str:
+    """Escape URL percent signs before handing a URL to Alembic's ConfigParser.
+
+    URL-encoded passwords contain ``%XX`` escapes. Alembic stores
+    ``sqlalchemy.url`` through ConfigParser, which treats ``%`` as interpolation
+    syntax at set-time and would otherwise reject a valid Supabase pooler URL.
+    """
+    return url.replace("%", "%%")
+
+
 class Settings(BaseSettings):
     """Application settings with environment-based configuration."""
 

@@ -14,18 +14,16 @@ from sqlalchemy.pool import NullPool
 from alembic import context
 
 from app.db.database import Base
-from app.core.config import settings
+from app.core.config import escape_alembic_url, settings
 import app.models  # noqa: F401
 
 # This is the Alembic Config object
 config = context.config
 
-# Set sqlalchemy.url from environment.
-# Alembic's ConfigParser interpolation treats a literal '%' as a marker, while
-# URL-encoded database passwords contain '%XX' escapes. Double them so the
-# stored value survives interpolation and decodes back to the real URL.
+# Set sqlalchemy.url from environment. ConfigParser needs URL '%XX' escapes
+# doubled at set-time; get_main_option() decodes them back to the real URL.
 config.set_main_option(
-    "sqlalchemy.url", str(settings.DATABASE_URL).replace("%", "%%")
+    "sqlalchemy.url", escape_alembic_url(str(settings.DATABASE_URL))
 )
 
 # Interpret the config file for Python logging
