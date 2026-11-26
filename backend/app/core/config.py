@@ -19,6 +19,16 @@ INSECURE_SECRET_KEYS = frozenset({
 })
 
 
+def escape_alembic_url(url: str) -> str:
+    """Escape URL percent signs before handing a URL to Alembic's ConfigParser.
+
+    URL-encoded passwords contain ``%XX`` escapes. Alembic stores
+    ``sqlalchemy.url`` through ConfigParser, which treats ``%`` as interpolation
+    syntax at set-time and would otherwise reject a valid Supabase pooler URL.
+    """
+    return url.replace("%", "%%")
+
+
 class Settings(BaseSettings):
     """Application settings with environment-based configuration."""
 
@@ -47,6 +57,11 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = Field(default=20, env="DATABASE_POOL_SIZE")
     DATABASE_MAX_OVERFLOW: int = Field(default=10, env="DATABASE_MAX_OVERFLOW")
     DATABASE_POOL_PRE_PING: bool = Field(default=True, env="DATABASE_POOL_PRE_PING")
+    # Shared transaction poolers do not support prepared statements. Off by
+    # default because the documented Supabase choice here is session pooling.
+    DATABASE_DISABLE_PREPARED_STATEMENTS: bool = Field(
+        default=False, env="DATABASE_DISABLE_PREPARED_STATEMENTS"
+    )
 
     # Security
     SECRET_KEY: str = Field(
@@ -97,6 +112,12 @@ class Settings(BaseSettings):
 
     # Testing
     TESTING: bool = Field(default=False, env="TESTING")
+
+    # Supabase REST proof. The anon key is public but stays out of git; a
+    # service_role key is deliberately not represented here.
+    SUPABASE_URL: Optional[str] = Field(default=None, env="SUPABASE_URL")
+    SUPABASE_ANON_KEY: Optional[str] = Field(default=None, env="SUPABASE_ANON_KEY")
+    SMOKE_API_URL: str = Field(default="http://localhost:8000", env="SMOKE_API_URL")
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

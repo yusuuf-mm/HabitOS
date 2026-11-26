@@ -8,6 +8,48 @@ any Docker host you control.
 > undecided. The notes below are generic self-hosting instructions, not a
 > description of the current production setup.
 
+## Supabase Postgres option
+
+A Supabase project can replace the `habitos-db-prod` container. The app still
+uses its own JWT auth; Supabase Auth and `service_role` keys are not used.
+
+Use **Project Settings → Database → Connection strings → Connect → Session
+pooler** (port `5432`) and copy the exact host from that dialog. Put the real
+values only in the ignored `.env.production` / backend env file:
+
+```bash
+DATABASE_URL=postgresql+asyncpg://postgres.<PROJECT-REF>:<URL-ENCODED-PASSWORD>@<POOLER-HOST>:5432/postgres
+SUPABASE_URL=https://<PROJECT-REF>.supabase.co
+SUPABASE_ANON_KEY=<anon-key>
+DATABASE_DISABLE_PREPARED_STATEMENTS=False
+```
+
+URL-encode the password (`@` → `%40`, `%` → `%25`, etc.). The migration env
+escapes `%XX` internally, so the URL in the env file stays human-readable.
+Only placeholders belong in `.env.example` / `backend/.env.example`.
+
+For a fresh database, run migrations before starting the API:
+
+```bash
+cd backend
+uv sync
+uv run alembic upgrade head
+uv run alembic check
+uv run python scripts/seed_data.py   # destructive; fresh DB only
+uv run python scripts/supabase_smoke.py
+uv run python scripts/supabase_rls_check.py
+```
+
+`e6f7a8b9c0d1` enables RLS on every `public` table with no policies. Anon REST
+reads return HTTP `200` and `[]`; the backend's owner connection still works
+because `FORCE ROW LEVEL SECURITY` is off. Do not switch the app to the anon key
+or add a policy in this deployment.
+
+If you switch to the shared **transaction** pooler on port `6543`, set
+`DATABASE_DISABLE_PREPARED_STATEMENTS=True` and re-run all verification steps.
+That mode was not part of the recorded proof. See [docs/SUPABASE.md](./docs/SUPABASE.md)
+for the new-machine procedure and secret-handling rules.
+
 ## 📋 Prerequisites
 
 - Docker Engine 20.10+

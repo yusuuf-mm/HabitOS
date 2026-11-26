@@ -30,6 +30,11 @@ else:
         "max_overflow": settings.DATABASE_MAX_OVERFLOW,
         "pool_pre_ping": settings.DATABASE_POOL_PRE_PING,
     })
+    if settings.DATABASE_DISABLE_PREPARED_STATEMENTS:
+        # Required by Supabase's shared transaction pooler (port 6543).
+        # SQLAlchemy 2.0.25 has no prepared_statement_cache_size engine option,
+        # so disable the cache at the asyncpg driver boundary instead.
+        engine_kwargs["connect_args"] = {"statement_cache_size": 0}
 
 if settings.TESTING and not is_sqlite:
     engine_kwargs["poolclass"] = NullPool

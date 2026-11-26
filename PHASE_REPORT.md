@@ -1559,3 +1559,156 @@ checked.
   not as a passed check.
 - Browser automation was not used for the real-mic pass; the evidence above is
   the user's supplied screenshot and retest.
+
+---
+
+## Phase 8 — Supabase Postgres
+
+Branch: `feat/supabase-postgres`, created from `main` at `3d8bdae` (the voice
+merge). The model split `[NVIDIA_MODEL_FAST, NVIDIA_MODEL_FAST,
+NVIDIA_MODEL_STRONG]` was not touched. No voice or calendar changes are included
+here; the local `feat/calendar-time-axis` branch was deliberately kept out.
+
+**Project and connection**
+
+The project name and region were confirmed before creation/linking:
+
+- Project: `HabitOS`
+- Ref: `znzjilabaxynemuwllwy`
+- Region: `us-east-1` (East US / North Virginia, immutable)
+- Status: `ACTIVE_HEALTHY`
+- Connection: shared **session pooler**, `aws-0-us-east-1.pooler.supabase.com:5432`
+- User: `postgres.znzjilabaxynemuwllwy`
+- `DATABASE_DISABLE_PREPARED_STATEMENTS=False`
+- Supabase CLI: `3.4.0`
+
+The pooler host came from **Dashboard → Connect**; it is not derived from the
+region. Project creation needed `--yes` in agent mode and was retried after a
+`HostedMutationConsentRequiredError` and a `ProjectsCreateNetworkError`. No
+password, anon key or `service_role` key is printed in this report or committed.
+`.env` and `backend/.env` are gitignored; the committed examples hold
+placeholders only.
+
+Config check (safe fields only):
+
+```
+db_host=aws-0-us-east-1.pooler.supabase.com
+db_user=postgres.znzjilabaxynemuwllwy
+db_port=5432
+supabase_url=https://znzjilabaxynemuwllwy.supabase.co
+anon_len=208
+disable_prepared=False
+```
+
+**Changed**
+
+- `backend/app/core/config.py`: Supabase URL / anon-key settings, prepared
+  statement toggle, and `escape_alembic_url()` for ConfigParser `%XX` escapes.
+- `backend/alembic/env.py`: uses that helper before `Config.set_main_option()`.
+- `backend/alembic/versions/e6f7a8b9c0d1_enable_rls_without_policies.py`:
+  enables RLS on every `public` table, adds no policies and does not use `FORCE
+  ROW LEVEL SECURITY`.
+- `backend/tests_integration/test_rls_postgres.py`,
+  `backend/tests/test_supabase_config.py`,
+  `backend/tests/test_alembic_url_escaping.py`: owner-bypass proof, config and
+  URL-escaping tests.
+- `backend/scripts/supabase_smoke.py`, `backend/scripts/supabase_rls_check.py`:
+  repeatable live checks that print no tokens or keys.
+- `README.md`, `DEPLOYMENT.md`, `docs/SUPABASE.md`, `.github/workflows/ci-cd.yml`:
+  new-machine setup, secret handling, explicit config/RLS CI steps.
+
+**Real migration output**
+
+`uv run alembic upgrade head` ran on a fresh Supabase database with no prior
+data. The existing migration history was reused; no second history was created.
+
+```
+current -> e6f7a8b9c0d1 (head)
+heads   -> e6f7a8b9c0d1 (head)
+check   -> No new upgrade operations detected.
+```
+
+Fresh seed:
+
+```
+INFO:__main__:Seeding complete! User: test@example.com / password123
+```
+
+`tools/migration_cycle.sh` was verified manually through `e6f7a8b9c0d1` with
+RLS checks. On this Windows machine the script itself fails at
+`set: pipefail\r: invalid option name` and `alembic: command not found`; the
+Linux CI job is the primary runner for it.
+
+**Real local test output**
+
+```
+full backend suite (local Postgres) -> 185 passed, 1 xpassed, 1 warning in 236.00s
+RLS integration tests               -> 2 passed
+config + Alembic URL tests          -> 7 passed, 1 warning in 10.93s
+```
+
+**Real live smoke output**
+
+`uv run python scripts/supabase_smoke.py` drove the real Supabase database
+through the FastAPI app via `ASGITransport`, with a fresh throwaway user per
+run:
+
+```
+health: HTTP 200 OK
+register: HTTP 200 OK
+login: HTTP 200 OK
+  login_user_matches=True
+objectives: HTTP 200 OK
+  objective_count=8
+create_behavior: HTTP 201 OK
+solve: HTTP 200 OK
+  status=completed scheduled=1 total_score=3.75
+week_preview: HTTP 200 OK
+  week_start=2026-11-30 days=7 unavailable=0 skipped=0
+SMOKE_RESULT PASS (7/7 checks)
+```
+
+**Real anon REST proof**
+
+`uv run python scripts/supabase_rls_check.py` enumerated every `public` table
+with the owner connection, compared row counts, then requested each table with
+the anon key through Supabase REST:
+
+```
+public_tables=12 policies=0
+rls_enabled_all=True
+force_rls_any=False
+alembic_version: HTTP 200 owner_rows=1 anon_rows=0 rls=True force=False -> DENIED
+behaviors: HTTP 200 owner_rows=17 anon_rows=0 rls=True force=False -> DENIED
+completion_logs: HTTP 200 owner_rows=28 anon_rows=0 rls=True force=False -> DENIED
+constraints: HTTP 200 owner_rows=2 anon_rows=0 rls=True force=False -> DENIED
+habit_telemetry: HTTP 200 owner_rows=0 anon_rows=0 rls=True force=False -> DENIED
+helper_confirmations: HTTP 200 owner_rows=0 anon_rows=0 rls=True force=False -> DENIED
+items: HTTP 200 owner_rows=0 anon_rows=0 rls=True force=False -> DENIED
+objective_impacts: HTTP 200 owner_rows=36 anon_rows=0 rls=True force=False -> DENIED
+objectives: HTTP 200 owner_rows=16 anon_rows=0 rls=True force=False -> DENIED
+optimization_runs: HTTP 200 owner_rows=9 anon_rows=0 rls=True force=False -> DENIED
+scheduled_behaviors: HTTP 200 owner_rows=34 anon_rows=0 rls=True force=False -> DENIED
+users: HTTP 200 owner_rows=2 anon_rows=0 rls=True force=False -> DENIED
+ANON_RESULT PASS (12/12 tables denied)
+```
+
+An RLS denial through PostgREST is HTTP `200` with `[]`, not `401`: the anon key
+is a valid JWT and no policy grants rows. The FastAPI owner connection still
+works because `FORCE ROW LEVEL SECURITY` is intentionally off.
+
+**Commits**
+
+```
+5118d7e config(db): add Supabase pooler settings and proof placeholders
+c54c463 db(rls): enable RLS on public tables without policies
+a7dc273 fix(db): escape percent signs in Alembic database URLs
+final commit: docs(db): document Supabase setup and verification gates
+```
+
+**Not covered**
+
+- The shared **transaction** pooler on port `6543` was not used or verified. It
+  needs `DATABASE_DISABLE_PREPARED_STATEMENTS=True` and a separate full retest.
+- Supabase Auth was not added; HabitOS still issues its own JWT tokens.
+- No browser/UI retest was performed for this database-only phase.
